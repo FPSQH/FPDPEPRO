@@ -4236,8 +4236,8 @@ function showSessionToast(msg) {
 // ▶ Remplacez les deux valeurs ci-dessous par celles de votre projet
 //   Supabase Dashboard → Settings → API
 // ══════════════════════════════════════════════════════════════════
-const SUPABASE_URL      = 'https://ylbgbztagfjsjzhshekd.supabase.co';       // ex: https://abcdefgh.supabase.co
-const SUPABASE_ANON_KEY = 'sb_publishable_MYVqNNBRMygRK7aolikUhg_LWuPeEHb';  // clé "anon public"
+const SUPABASE_URL      = 'https://ylbgbztagfjsjzhshekd.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_MYVqNNBRMygRK7aolikUhg_LWuPeEHb';
 
 const _supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let _currentUser = null;
@@ -4285,7 +4285,7 @@ async function handleLogin() {
     const email = document.getElementById('reset-email').value.trim();
     if (!email) { showLoginErr('Entrez votre adresse email.'); return; }
     btn.disabled = true; btn.textContent = 'Envoi…';
-    const { error } = await _supa.auth.resetPasswordForEmail(email, { redirectTo: window.location.href });
+    const { error } = await _supa.auth.resetPasswordForEmail(email, { redirectTo: 'https://fpsqh.github.io/FPDPEPRO/DPE_Prospection_SQH_v5_multi.html' });
     btn.disabled = false; btn.textContent = 'Envoyer le lien';
     if (error) { showLoginErr(getAuthErrMsg(error)); return; }
     infoEl.textContent = '📧 Email envoyé ! Vérifiez votre boîte mail.';
@@ -4385,12 +4385,27 @@ async function persistSuiviCloud() {
       checked: b.checked, suivi: b.suivi || {},
       ademe: b.ademe || null, audit: b.audit || null,
     }));
-    await _supa.from('sessions').upsert({
-      user_id:     _currentUser.id,
-      nom_session: '__autosave__',
-      biens:       { version: 3, date: new Date().toISOString(), agentInfo, biens: savedBiens },
-      updated_at:  new Date().toISOString(),
-    }, { onConflict: 'user_id,nom_session' });
+    const biensPayload = { version: 3, date: new Date().toISOString(), agentInfo, biens: savedBiens };
+
+    // Cherche si l'autosave existe déjà
+    const { data: existing } = await _supa.from('sessions')
+      .select('id')
+      .eq('user_id', _currentUser.id)
+      .eq('nom_session', '__autosave__')
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      await _supa.from('sessions')
+        .update({ biens: biensPayload, updated_at: new Date().toISOString() })
+        .eq('id', existing[0].id);
+    } else {
+      await _supa.from('sessions').insert({
+        user_id:     _currentUser.id,
+        nom_session: '__autosave__',
+        biens:       biensPayload,
+        updated_at:  new Date().toISOString(),
+      });
+    }
     showCloudBadge();
   } catch(e) { console.warn('Cloud save failed:', e); }
 }
@@ -4469,6 +4484,7 @@ async function saveNamedSession() {
   const nom = (document.getElementById('session-save-name').value || '').trim();
   if (!nom) { alert('Donnez un nom à votre session.'); return; }
   if (!biens.length) { alert('Aucun bien chargé à sauvegarder.'); return; }
+
   const savedBiens = biens.map(b => ({
     adresse: b.adresse, dpe: b.dpe, ges: b.ges, type: b.type,
     nom: b.nom, civilite: b.civilite, secteur: b.secteur,
@@ -4478,12 +4494,32 @@ async function saveNamedSession() {
     checked: b.checked, suivi: b.suivi || {},
     ademe: b.ademe || null, audit: b.audit || null,
   }));
-  const { error } = await _supa.from('sessions').upsert({
+
+  const payload = {
     user_id:     _currentUser.id,
     nom_session: nom,
     biens:       { version: 3, date: new Date().toISOString(), agentInfo, biens: savedBiens },
     updated_at:  new Date().toISOString(),
-  }, { onConflict: 'user_id,nom_session' });
+  };
+
+  // Cherche si une session avec ce nom existe déjà
+  const { data: existing } = await _supa.from('sessions')
+    .select('id')
+    .eq('user_id', _currentUser.id)
+    .eq('nom_session', nom)
+    .limit(1);
+
+  let error;
+  if (existing && existing.length > 0) {
+    // Met à jour la ligne existante par son id
+    ({ error } = await _supa.from('sessions')
+      .update({ biens: payload.biens, updated_at: payload.updated_at })
+      .eq('id', existing[0].id));
+  } else {
+    // Insère une nouvelle ligne
+    ({ error } = await _supa.from('sessions').insert(payload));
+  }
+
   if (error) { alert('Erreur sauvegarde : ' + error.message); return; }
   showSessionToast('☁️ "' + nom + '" sauvegardée — ' + savedBiens.length + ' biens');
   loadSessionsList();
@@ -4500,15 +4536,24 @@ async function saveCurrentSession() {
 
 async function loadNamedSession(nom) {
   if (!_currentUser) return;
-  const { data } = await _supa.from('sessions')
-    .select('biens')
+
+  // Récupère toutes les lignes correspondantes (gère les éventuels doublons)
+  const { data, error } = await _supa.from('sessions')
+    .select('biens, updated_at')
     .eq('user_id', _currentUser.id)
     .eq('nom_session', nom)
-    .maybeSingle();
-  if (!data?.biens?.biens?.length) { alert('Session introuvable ou vide.'); return; }
-  _restoreFullBiens(data.biens.biens, data.biens);
+    .order('updated_at', { ascending: false })
+    .limit(1);
+
+  if (error) { alert('Erreur lors du chargement : ' + error.message); return; }
+  if (!data || data.length === 0) { alert('Session introuvable.'); return; }
+
+  const row = data[0];
+  if (!row.biens?.biens?.length) { alert('Session vide ou format incorrect.'); return; }
+
+  _restoreFullBiens(row.biens.biens, row.biens);
   closeSessionsModal();
-  showSessionToast('📂 "' + nom + '" chargée — ' + data.biens.biens.length + ' biens');
+  showSessionToast('📂 "' + nom + '" chargée — ' + row.biens.biens.length + ' biens');
 }
 
 async function deleteNamedSession(nom, btn) {
