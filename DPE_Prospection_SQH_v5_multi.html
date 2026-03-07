@@ -4604,16 +4604,93 @@ self.addEventListener('fetch',e=>{
 
 // ── Init au chargement ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
-  // Affiche le login screen par défaut (caché visuellement)
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
-  initAuth();
 
-  // Responsive : invalidate leaflet map on resize
+  // Détecte si on arrive depuis un lien de réinitialisation de mot de passe
+  const hash = window.location.hash;
+  if (hash.includes('type=recovery') || hash.includes('type=email_change')) {
+    showNewPasswordForm();
+  } else {
+    initAuth();
+  }
+
   window.addEventListener('resize', () => {
     if (leafletMap) leafletMap.invalidateSize();
   });
 });
+
+// ── Formulaire nouveau mot de passe ──────────────────────────────
+function showNewPasswordForm() {
+  const card = document.querySelector('.login-card');
+  card.innerHTML = `
+    <div class="login-logo">
+      <svg height="38" viewBox="0 0 220 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="38" height="38" rx="8" fill="#038B92"/>
+        <path d="M10 19C10 14 14 10 19 10C22 10 24.5 11.5 26 14L22 16C21.2 14.8 20.2 14 19 14C16.2 14 14 16.2 14 19C14 21.8 16.2 24 19 24C20.2 24 21.2 23.2 22 22L26 24C24.5 26.5 22 28 19 28C14 28 10 24 10 19Z" fill="white"/>
+        <text x="48" y="26" font-family="'Source Sans 3',sans-serif" font-size="18" font-weight="700" fill="#038B92">Square Habitat</text>
+      </svg>
+    </div>
+    <div class="login-title">
+      <h2>Nouveau mot de passe</h2>
+      <p>Choisissez votre nouveau mot de passe</p>
+    </div>
+    <div id="newpwd-err" class="login-err"></div>
+    <div id="newpwd-info" class="login-info"></div>
+    <div class="login-fields">
+      <div class="login-field">
+        <label>Nouveau mot de passe</label>
+        <input type="password" id="newpwd-1" placeholder="8 caractères minimum" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')document.getElementById('newpwd-2').focus()"/>
+      </div>
+      <div class="login-field">
+        <label>Confirmer le mot de passe</label>
+        <input type="password" id="newpwd-2" placeholder="Répétez le mot de passe" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')submitNewPassword()"/>
+      </div>
+    </div>
+    <button class="login-btn" id="newpwd-btn" onclick="submitNewPassword()">✓ Enregistrer le mot de passe</button>
+  `;
+  // Laisse Supabase traiter le token dans le hash
+  _supa.auth.getSession();
+}
+
+async function submitNewPassword() {
+  const btn    = document.getElementById('newpwd-btn');
+  const errEl  = document.getElementById('newpwd-err');
+  const infoEl = document.getElementById('newpwd-info');
+  const pwd1   = document.getElementById('newpwd-1').value;
+  const pwd2   = document.getElementById('newpwd-2').value;
+
+  errEl.style.display  = 'none';
+  infoEl.style.display = 'none';
+
+  if (pwd1.length < 8) {
+    errEl.textContent = 'Le mot de passe doit faire au moins 8 caractères.';
+    errEl.style.display = 'block'; return;
+  }
+  if (pwd1 !== pwd2) {
+    errEl.textContent = 'Les deux mots de passe ne correspondent pas.';
+    errEl.style.display = 'block'; return;
+  }
+
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+  const { error } = await _supa.auth.updateUser({ password: pwd1 });
+  btn.disabled = false; btn.textContent = '✓ Enregistrer le mot de passe';
+
+  if (error) {
+    errEl.textContent = 'Erreur : ' + error.message;
+    errEl.style.display = 'block'; return;
+  }
+
+  infoEl.textContent = '✅ Mot de passe mis à jour ! Redirection…';
+  infoEl.style.display = 'block';
+  // Nettoie le hash et redirige vers le login après 2 secondes
+  setTimeout(() => {
+    window.location.hash = '';
+    window.location.reload();
+  }, 2000);
+}
 </script>
 
 </body>
