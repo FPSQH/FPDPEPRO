@@ -720,59 +720,168 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 }
 
 @media (max-width: 768px) {
-  /* Show hamburger, hide topbar clutter */
+  /* ── Topbar ── */
   .hamburger-btn{display:flex}
   #topbar-user{display:none}
   .topbar-tag{display:none}
   .topbar-divider{display:none}
   .btn-bug-top{display:none}
-  .btn-sessions-top span:not(:first-child){display:none}
+  .cloud-saved-badge{display:none !important}
+  .btn-sessions-top{padding:5px 8px}
+  .btn-sessions-top span{display:none}
+  .btn-profile-top .profile-label{display:none}
+  .btn-profile-top{padding:5px 8px}
+  .btn-logout-top{padding:5px 8px}
 
-  /* Sidebar becomes a drawer */
-  .sidebar{
-    position:fixed;left:0;top:56px;bottom:0;
-    z-index:210;
-    transform:translateX(-100%);
-    transition:transform .25s cubic-bezier(.4,0,.2,1);
-    box-shadow:var(--shadow-l);
-    width:min(310px, 85vw) !important;
+  /* ── Layout principal ── */
+  .body{
+    flex-direction:column;
+    height:calc(100vh - 56px);
+    overflow:hidden;
+    position:relative;
   }
-  .sidebar.open{transform:translateX(0)}
-  .sidebar-backdrop.open{display:block}
 
-  /* Content fills full width */
-  .body{flex-direction:column}
-  .content{width:100%;height:calc(100vh - 56px - 56px)} /* subtract topbar + bottom nav */
+  /* ── Sidebar = panneau plein écran ── */
+  .sidebar{
+    position:fixed;
+    top:56px;left:0;right:0;bottom:56px;
+    z-index:210;
+    width:100% !important;
+    transform:translateX(-100%);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);
+    box-shadow:none;
+    overflow-y:auto;
+  }
+  .sidebar.open{
+    transform:translateX(0);
+  }
+  .sidebar-backdrop{display:none !important}
 
-  /* Detail panel always below map */
-  .detail-panel{height:auto;min-height:0;max-height:55vh}
+  /* ── Content = carte plein écran ── */
+  .content{
+    position:absolute;
+    top:0;left:0;right:0;
+    bottom:0;
+    width:100%;
+    height:100%;
+    display:flex;
+    flex-direction:column;
+    transition:opacity .2s;
+  }
 
-  /* Show bottom nav */
+  /* ── Carte ── */
+  #map{
+    flex:1;
+    min-height:0;
+    width:100%;
+  }
+
+  /* ── Resize handle caché sur mobile ── */
+  .resize-handle{display:none}
+
+  /* ── Panneau détail = bottom sheet ── */
+  .detail-panel{
+    position:fixed;
+    left:0;right:0;bottom:56px;
+    height:70vh;
+    max-height:70vh;
+    z-index:190;
+    border-top:3px solid var(--sqh-green);
+    border-radius:16px 16px 0 0;
+    box-shadow:0 -4px 24px rgba(0,0,0,.18);
+    transform:translateY(100%);
+    transition:transform .3s cubic-bezier(.4,0,.2,1);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .detail-panel.mobile-open{
+    transform:translateY(0);
+  }
+
+  /* Handle visuel pour le bottom sheet */
+  .detail-panel::before{
+    content:'';
+    display:block;
+    width:40px;height:4px;
+    background:var(--sqh-gray3);
+    border-radius:2px;
+    margin:8px auto 0;
+    flex-shrink:0;
+  }
+
+  /* Onglets en haut du bottom sheet */
+  .detail-tabs{
+    display:flex !important;
+    flex-shrink:0;
+    overflow-x:auto;
+    border-bottom:1px solid var(--sqh-gray2);
+  }
+  .detail-tab{
+    padding:8px 12px;
+    font-size:11px;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  .detail-body{
+    flex:1;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    padding:12px 14px;
+  }
+
+  /* ── Bottom nav ── */
   .bottom-nav{display:flex}
-  .fab-list{display:block}
 
-  /* Detail tabs move to bottom nav on mobile */
-  .detail-tabs{display:none !important}
+  /* ── FAB caché (remplacé par bottom nav) ── */
+  .fab-list{display:none !important}
 
-  /* Touch-friendly cards */
-  .bien-card{min-height:52px;padding:10px 12px}
-  .btn, .btn-green, .btn-outline{min-height:40px;font-size:13px}
+  /* ── Cards tactiles ── */
+  .bien-card{min-height:56px;padding:12px}
+  .bien-card .bc-addr{font-size:12px}
 
-  /* Sessions / profile modals full width */
-  .sessions-modal{max-width:100%;border-radius:14px 14px 0 0;max-height:95vh;position:fixed;bottom:0;left:0;right:0}
-  .profile-modal{max-width:100%;border-radius:14px 14px 0 0;position:fixed;bottom:0;left:0;right:0;width:100%}
-  .profile-overlay,.sessions-overlay{align-items:flex-end}
+  /* ── Boutons tactiles ── */
+  .btn{min-height:38px}
+  .suivi-statut-chip{padding:7px 14px;font-size:12px}
+
+  /* ── Modals en bottom sheet ── */
+  .sessions-overlay{align-items:flex-end}
+  .sessions-modal{
+    max-width:100%;width:100%;
+    border-radius:16px 16px 0 0;
+    max-height:88vh;
+    position:relative;
+  }
+  .profile-overlay{align-items:flex-end}
+  .profile-modal{
+    max-width:100%;width:100%;
+    border-radius:16px 16px 0 0;
+    position:relative;
+  }
+  .ademe-overlay{align-items:flex-end}
+  .ademe-modal{
+    max-width:100%;width:100%;
+    border-radius:16px 16px 0 0;
+    max-height:92vh;
+    position:relative;
+    overflow-y:auto;
+  }
+
+  /* ── Itinéraire ── */
+  .itin-overlay{border-radius:16px 16px 0 0}
+
+  /* ── Login card ── */
+  .login-card{margin:16px;padding:28px 20px}
 }
 
 @media (max-width: 480px) {
-  .topbar{padding:0 10px;gap:8px}
+  .topbar{padding:0 10px;gap:6px;height:52px}
   .topbar-logo-img{height:26px}
-  .btn-profile-top .profile-label{display:none}
-  .login-card{padding:28px 20px;margin:16px}
+  .btn-sessions-top,.btn-profile-top,.btn-logout-top{padding:4px 7px}
 }
 
-@media (min-width: 769px) and (max-width: 1024px) {
-  :root{--sidebar-w: 260px}
+@media (min-width:769px) and (max-width:1024px){
+  :root{--sidebar-w:260px}
 }
 
 </style>
@@ -1558,6 +1667,8 @@ function selectBien(id) {
   showDetailTabs();
   renderDetail();
   setTimeout(() => { document.getElementById(`card-${id}`)?.scrollIntoView({ behavior:'smooth', block:'nearest' }); }, 60);
+  // Sur mobile : ferme la sidebar et ouvre le panneau fiche
+  if (typeof mobileOnBienSelect === 'function') mobileOnBienSelect();
 }
 
 function switchTab(tab, el) {
@@ -3853,6 +3964,11 @@ function persistSuivis() {
     localStorage.setItem(LS_KEY,   JSON.stringify(map));
     localStorage.setItem(LS_AGENT, JSON.stringify(agentInfo));
   } catch(e) { console.warn('localStorage save failed:', e); }
+  // Autosave cloud — debounce 2 secondes
+  if (typeof _currentUser !== 'undefined' && _currentUser && biens.length) {
+    clearTimeout(window._cloudDebounce);
+    window._cloudDebounce = setTimeout(() => persistSuiviCloud(), 2000);
+  }
 }
 
 function restoreSuivis() {
@@ -4577,43 +4693,72 @@ function closeSidebar() {
 }
 
 // ── Mobile bottom nav ─────────────────────────────────────────────
+let _mobileCurrentView = 'map';
+
 function mobileSwitchView(view) {
   if (window.innerWidth > 768) return;
+  _mobileCurrentView = view;
+
+  // Met à jour les boutons de nav
   ['bn-list','bn-map','bn-detail','bn-letter'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
-  const fab = document.getElementById('fab-list');
-  if (fab) fab.style.display = 'none';
+  document.getElementById('bn-' + (view === 'letter' ? 'letter' : view === 'detail' ? 'detail' : view))?.classList.add('active');
+
+  const sidebar     = document.getElementById('sidebar');
+  const detailPanel = document.getElementById('detail-panel');
 
   if (view === 'list') {
-    toggleSidebar();
+    // Ouvre la sidebar en plein écran
+    if (sidebar) { sidebar.classList.add('open'); }
+    if (detailPanel) detailPanel.classList.remove('mobile-open');
     document.getElementById('bn-list')?.classList.add('active');
+
   } else if (view === 'map') {
-    if (document.getElementById('sidebar')?.classList.contains('open')) closeSidebar();
+    // Ferme tout, carte visible
+    if (sidebar) sidebar.classList.remove('open');
+    if (detailPanel) detailPanel.classList.remove('mobile-open');
     document.getElementById('bn-map')?.classList.add('active');
-    if (fab) fab.style.display = 'block';
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 300);
+
   } else if (view === 'detail') {
+    // Ferme sidebar, ouvre le panneau fiche
+    if (sidebar) sidebar.classList.remove('open');
+    if (detailPanel) {
+      detailPanel.classList.add('mobile-open');
+      if (activeId !== null) {
+        try { switchTab('bien', document.getElementById('tab-bien')); } catch(e){}
+      }
+    }
     document.getElementById('bn-detail')?.classList.add('active');
-    if (activeId !== null) { try { switchTab('bien', document.getElementById('tab-bien')); } catch(e){} }
+
   } else if (view === 'letter') {
+    if (sidebar) sidebar.classList.remove('open');
+    if (detailPanel) {
+      detailPanel.classList.add('mobile-open');
+      if (activeId !== null) {
+        try { switchTab('letter', document.getElementById('tab-letter')); } catch(e){}
+      }
+    }
     document.getElementById('bn-letter')?.classList.add('active');
-    if (activeId !== null) { try { switchTab('letter', document.getElementById('tab-letter')); } catch(e){} }
   }
 }
 
-// ── Patch persistSuivis → autosave cloud (debounce 2s) ───────────
-(function() {
-  const _orig = window.persistSuivis;
-  if (typeof _orig !== 'function') return;
-  window.persistSuivis = function() {
-    _orig();
-    clearTimeout(window._cloudDebounce);
-    window._cloudDebounce = setTimeout(() => {
-      if (_currentUser && biens.length) persistSuiviCloud();
-    }, 2000);
-  };
-})();
+// Ferme la sidebar quand on clique sur un bien (mobile)
+function mobileOnBienSelect() {
+  if (window.innerWidth > 768) return;
+  // Ferme la sidebar et ouvre la fiche
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) sidebar.classList.remove('open');
+  const detailPanel = document.getElementById('detail-panel');
+  if (detailPanel) detailPanel.classList.add('mobile-open');
+  _mobileCurrentView = 'detail';
+  ['bn-list','bn-map','bn-detail','bn-letter'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
+  document.getElementById('bn-detail')?.classList.add('active');
+  if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 250);
+}
 
 // ── Patch updateAgent → sauvegarde profil cloud (debounce 1.5s) ──
 (function() {
