@@ -4,6 +4,33 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>DPE Prospection SQH</title>
+<script>
+/* ── Nettoyage Service Worker ──────────────────────────────────────
+   L'ancien SW (blob URL) interceptait les fetches et essayait de
+   parser le HTML comme du JS → "Unexpected end of input".
+   Ce script s'exécute EN PREMIER, désinstalle tous les SW en cache,
+   vide les caches, puis recharge la page une seule fois proprement. */
+(function() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    if (regs.length === 0) return; // Rien à supprimer
+    // Désinstalle tous les SW actifs
+    var kills = regs.map(function(r) { return r.unregister(); });
+    Promise.all(kills).then(function() {
+      // Vide tous les caches SW
+      return caches.keys().then(function(keys) {
+        return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+      });
+    }).then(function() {
+      // Recharge une seule fois (flag sessionStorage anti-boucle)
+      if (!sessionStorage.getItem('_sw_purged')) {
+        sessionStorage.setItem('_sw_purged', '1');
+        location.reload(true);
+      }
+    });
+  });
+})();
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
@@ -4754,8 +4781,9 @@ function mobileUpdateItinBtn() {
 })();
 
 // ── PWA Service Worker ──────────────────────────────────────────
-if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  navigator.serviceWorker.register('/FPDPEPRO/sw.js').catch(() => {});
+// (désinstallation de l'ancien SW gérée en haut du <head>)
+if ('serviceWorker' in navigator && location.protocol === 'https:' && location.hostname.includes('github.io')) {
+  navigator.serviceWorker.register('/FPDPEPRO/sw.js').catch(function() {});
 }
 
 // ── Init au chargement ────────────────────────────────────────────
