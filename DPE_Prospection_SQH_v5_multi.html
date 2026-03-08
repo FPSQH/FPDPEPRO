@@ -1072,6 +1072,7 @@ let agentInfo = {
   prenom: '',
   nom: 'Votre Nom',
   agence: 'Square Habitat',
+  adresseAgence: '',
   telephone: '',
   telephoneFixe: '',
   email: '',
@@ -1742,7 +1743,7 @@ function showDetailEmpty() {
 }
 function openProfileModal() {
   // Champs directs
-  ['prenom','nom','agence','telephone','telephoneFixe'].forEach(k => {
+  ['prenom','nom','agence','adresseAgence','telephone','telephoneFixe'].forEach(k => {
     const el = document.getElementById('profile-' + k);
     if (el) el.value = agentInfo[k] || '';
   });
@@ -2158,6 +2159,7 @@ function printLetter() {
       <div class="lh-name">
         <div class="title">Prospection <span>DPE</span></div>
         <div class="sub">${agentInfo.agence || 'Square Habitat'}</div>
+        ${agentInfo.adresseAgence ? `<div class="sub" style="font-size:7pt;color:#706F6F">${agentInfo.adresseAgence}</div>` : ''}
       </div>
     </div>
     <div class="lh-agent">
@@ -4310,6 +4312,7 @@ function showSessionToast(msg) {
       <div class="letter-form-row"><label>Prénom</label><input id="profile-prenom" type="text" oninput="updateAgent('prenom',this.value)" placeholder="Frédéric"/></div>
       <div class="letter-form-row"><label>Nom</label><input id="profile-nom" type="text" oninput="updateAgent('nom',this.value)" placeholder="DUPONT"/></div>
       <div class="letter-form-row"><label>Agence</label><input id="profile-agence" type="text" oninput="updateAgent('agence',this.value)" placeholder="Square Habitat"/></div>
+      <div class="letter-form-row"><label>Adresse agence</label><input id="profile-adresseAgence" type="text" oninput="updateAgent('adresseAgence',this.value)" placeholder="12 rue de la Paix, 22000 Saint-Brieuc"/></div>
       <div class="letter-form-row"><label>Tél. mobile</label><input id="profile-telephone" type="text" oninput="updateAgent('telephone',this.value)" placeholder="06 00 00 00 00"/></div>
       <div class="letter-form-row"><label>Tél. fixe agence</label><input id="profile-telephoneFixe" type="text" oninput="updateAgent('telephoneFixe',this.value)" placeholder="02 96 00 00 00"/></div>
       <div class="letter-form-row" style="align-items:center">
@@ -4631,6 +4634,7 @@ async function loadUserProfile(userId) {
       if (data.nom_agent)       agentInfo.nom            = data.nom_agent;
       if (data.prenom)          agentInfo.prenom         = data.prenom;
       if (data.agence)          agentInfo.agence         = data.agence;
+      if (data.adresse_agence)  agentInfo.adresseAgence  = data.adresse_agence;
       if (data.telephone)       agentInfo.telephone      = data.telephone;
       if (data.telephone_fixe)  agentInfo.telephoneFixe  = data.telephone_fixe;
       if (data.email_pro)       agentInfo.email          = data.email_pro;
@@ -4646,6 +4650,7 @@ async function saveUserProfile() {
       nom_agent:       agentInfo.nom,
       prenom:          agentInfo.prenom,
       agence:          agentInfo.agence,
+      adresse_agence:  agentInfo.adresseAgence,
       telephone:       agentInfo.telephone,
       telephone_fixe:  agentInfo.telephoneFixe,
       email_pro:       agentInfo.email,
