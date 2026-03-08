@@ -720,164 +720,145 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 }
 
 @media (max-width: 768px) {
-  /* ── Topbar ── */
-  .hamburger-btn{display:flex}
-  #topbar-user{display:none}
-  .topbar-tag{display:none}
-  .topbar-divider{display:none}
-  .btn-bug-top{display:none}
-  .cloud-saved-badge{display:none !important}
-  .btn-sessions-top{padding:5px 8px}
-  .btn-sessions-top span{display:none}
-  .btn-profile-top .profile-label{display:none}
-  .btn-profile-top{padding:5px 8px}
-  .btn-logout-top{padding:5px 8px}
 
-  /* ── Layout principal ── */
+  /* ══ TOPBAR — compact, pas de débordement ═══════════════════════ */
+  .topbar{padding:0 8px;gap:4px;height:52px;overflow:hidden}
+  .hamburger-btn{display:flex;flex-shrink:0}
+  .topbar-logo-img{height:26px}
+  .topbar-tag,.topbar-divider,.btn-bug-top{display:none}
+  .topbar-spacer{flex:1;min-width:0}
+  #topbar-status,#topbar-user{display:none}
+  .cloud-saved-badge{display:none !important}
+  /* Bouton itinéraire déplacé dans la bottom nav */
+  .btn-itin-top{display:none !important}
+  .btn-sessions-top{padding:5px 7px;font-size:10px}
+  .btn-sessions-top span{display:none}
+  .btn-profile-top{padding:5px 7px;font-size:10px}
+  .btn-profile-top .profile-label{display:none}
+  .btn-logout-top{padding:5px 7px;font-size:10px}
+
+  /* ══ LAYOUT : colonne carte + fiche sous la topbar ══════════════ */
   .body{
     flex-direction:column;
-    height:calc(100vh - 56px);
+    height:calc(100vh - 52px - 56px); /* topbar 52px + bottom nav 56px */
     overflow:hidden;
     position:relative;
   }
 
-  /* ── Sidebar = panneau plein écran ── */
+  /* ══ SIDEBAR = plein écran glissant par-dessus tout ════════════ */
   .sidebar{
     position:fixed;
-    top:56px;left:0;right:0;bottom:56px;
-    z-index:210;
+    top:52px;left:0;right:0;bottom:56px;
+    z-index:300;
     width:100% !important;
     transform:translateX(-100%);
     transition:transform .28s cubic-bezier(.4,0,.2,1);
     box-shadow:none;
     overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
   }
-  .sidebar.open{
-    transform:translateX(0);
-  }
+  .sidebar.open{transform:translateX(0)}
   .sidebar-backdrop{display:none !important}
 
-  /* ── Content = carte plein écran ── */
+  /* ══ CONTENT — colonne verticale fixe ══════════════════════════ */
   .content{
-    position:absolute;
-    top:0;left:0;right:0;
-    bottom:0;
     width:100%;
     height:100%;
     display:flex;
     flex-direction:column;
-    transition:opacity .2s;
+    overflow:hidden;
+    position:relative;
   }
 
-  /* ── Carte ── */
+  /* ══ CARTE — 42% de la zone body, zoom isolé ═══════════════════
+     touch-action:none : le pinch-to-zoom reste dans Leaflet          */
   #map{
+    height:42%;
+    min-height:180px;
+    max-height:42%;
+    flex-shrink:0;
+    width:100%;
+    z-index:1;
+  }
+  .leaflet-container{touch-action:none !important}
+
+  /* ══ RESIZE HANDLE masqué ══════════════════════════════════════ */
+  .resize-handle{display:none !important}
+
+  /* ══ PANNEAU DÉTAIL — 58% restant, toujours visible ═══════════ */
+  .detail-panel{
     flex:1;
     min-height:0;
-    width:100%;
-  }
-
-  /* ── Resize handle caché sur mobile ── */
-  .resize-handle{display:none}
-
-  /* ── Panneau détail = bottom sheet ── */
-  .detail-panel{
-    position:fixed;
-    left:0;right:0;bottom:56px;
-    height:70vh;
-    max-height:70vh;
-    z-index:190;
+    position:relative;
+    transform:none !important;
+    border-radius:0;
     border-top:3px solid var(--sqh-green);
-    border-radius:16px 16px 0 0;
-    box-shadow:0 -4px 24px rgba(0,0,0,.18);
-    transform:translateY(100%);
-    transition:transform .3s cubic-bezier(.4,0,.2,1);
+    box-shadow:none;
     display:flex;
     flex-direction:column;
     overflow:hidden;
+    z-index:2;
   }
-  .detail-panel.mobile-open{
-    transform:translateY(0);
-  }
+  .detail-panel::before{display:none}
+  .detail-panel.mobile-open{transform:none !important}
 
-  /* Handle visuel pour le bottom sheet */
-  .detail-panel::before{
-    content:'';
-    display:block;
-    width:40px;height:4px;
-    background:var(--sqh-gray3);
-    border-radius:2px;
-    margin:8px auto 0;
-    flex-shrink:0;
-  }
-
-  /* Onglets en haut du bottom sheet */
+  /* Onglets TOUJOURS visibles, scrollables horizontalement */
   .detail-tabs{
     display:flex !important;
     flex-shrink:0;
     overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
     border-bottom:1px solid var(--sqh-gray2);
+    background:var(--sqh-gray1);
   }
-  .detail-tab{
-    padding:8px 12px;
-    font-size:11px;
-    white-space:nowrap;
-    flex-shrink:0;
-  }
+  .detail-tabs::-webkit-scrollbar{display:none}
+  .detail-tab{padding:9px 13px;font-size:11px;font-weight:600;white-space:nowrap;flex-shrink:0}
+
+  /* Corps du panneau scrollable indépendamment de la carte */
   .detail-body{
     flex:1;
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
-    padding:12px 14px;
+    overscroll-behavior:contain;
+    padding:12px 14px 20px;
   }
 
-  /* ── Bottom nav ── */
-  .bottom-nav{display:flex}
-
-  /* ── FAB caché (remplacé par bottom nav) ── */
+  /* ══ BOTTOM NAV avec bouton Itinéraire ══════════════════════════ */
+  .bottom-nav{display:flex !important;z-index:400}
+  #bn-itin{display:flex}
   .fab-list{display:none !important}
 
-  /* ── Cards tactiles ── */
-  .bien-card{min-height:56px;padding:12px}
+  /* ══ Cards tactiles ════════════════════════════════════════════ */
+  .bien-card{min-height:54px;padding:11px 12px}
   .bien-card .bc-addr{font-size:12px}
+  .suivi-statut-chip{padding:7px 14px;font-size:12px;min-height:36px}
 
-  /* ── Boutons tactiles ── */
-  .btn{min-height:38px}
-  .suivi-statut-chip{padding:7px 14px;font-size:12px}
-
-  /* ── Modals en bottom sheet ── */
-  .sessions-overlay{align-items:flex-end}
-  .sessions-modal{
-    max-width:100%;width:100%;
+  /* ══ Modals en bottom sheet ════════════════════════════════════ */
+  .sessions-overlay,.profile-overlay,.ademe-overlay{align-items:flex-end}
+  .sessions-modal,.profile-modal{
+    width:100%;max-width:100%;
     border-radius:16px 16px 0 0;
     max-height:88vh;
     position:relative;
   }
-  .profile-overlay{align-items:flex-end}
-  .profile-modal{
-    max-width:100%;width:100%;
-    border-radius:16px 16px 0 0;
-    position:relative;
-  }
-  .ademe-overlay{align-items:flex-end}
   .ademe-modal{
-    max-width:100%;width:100%;
+    width:100%;max-width:100%;
     border-radius:16px 16px 0 0;
     max-height:92vh;
     position:relative;
     overflow-y:auto;
   }
-
-  /* ── Itinéraire ── */
-  .itin-overlay{border-radius:16px 16px 0 0}
-
-  /* ── Login card ── */
   .login-card{margin:16px;padding:28px 20px}
 }
 
-@media (max-width: 480px) {
-  .topbar{padding:0 10px;gap:6px;height:52px}
-  .topbar-logo-img{height:26px}
-  .btn-sessions-top,.btn-profile-top,.btn-logout-top{padding:4px 7px}
+/* iPhone SE / très petits écrans */
+@media (max-width: 390px) {
+  #map{height:36%;min-height:150px;max-height:36%}
+  .detail-tab{padding:8px 10px;font-size:10px}
+  .topbar{height:48px}
+  .body{height:calc(100vh - 48px - 56px)}
+  .sidebar{top:48px}
 }
 
 @media (min-width:769px) and (max-width:1024px){
@@ -2407,6 +2388,9 @@ function updateItinButton() {
   } else {
     btn.style.display = 'none';
   }
+  // Bouton itinéraire dans la bottom nav mobile
+  const bnItin = document.getElementById('bn-itin');
+  if (bnItin) bnItin.style.display = (n >= 2 && window.innerWidth <= 768) ? 'flex' : 'none';
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -4342,6 +4326,9 @@ function showSessionToast(msg) {
     <button class="bottom-nav-btn" id="bn-letter" onclick="mobileSwitchView('letter')">
       <span class="bn-icon">✉️</span>Courrier
     </button>
+    <button class="bottom-nav-btn" id="bn-itin" onclick="showItinerary()" style="display:none">
+      <span class="bn-icon">📍</span>Itin.
+    </button>
   </div>
 </nav>
 <button class="fab-list" id="fab-list" onclick="mobileSwitchView('list')" style="display:none">☰ Liste</button>
@@ -4699,65 +4686,60 @@ function mobileSwitchView(view) {
   if (window.innerWidth > 768) return;
   _mobileCurrentView = view;
 
-  // Met à jour les boutons de nav
+  const sidebar = document.getElementById('sidebar');
+
+  // Mise à jour des boutons actifs
   ['bn-list','bn-map','bn-detail','bn-letter'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
-  document.getElementById('bn-' + (view === 'letter' ? 'letter' : view === 'detail' ? 'detail' : view))?.classList.add('active');
-
-  const sidebar     = document.getElementById('sidebar');
-  const detailPanel = document.getElementById('detail-panel');
 
   if (view === 'list') {
-    // Ouvre la sidebar en plein écran
-    if (sidebar) { sidebar.classList.add('open'); }
-    if (detailPanel) detailPanel.classList.remove('mobile-open');
+    // Ouvre la sidebar plein écran
+    if (sidebar) sidebar.classList.add('open');
     document.getElementById('bn-list')?.classList.add('active');
 
   } else if (view === 'map') {
-    // Ferme tout, carte visible
+    // Ferme la sidebar, reste sur la carte
     if (sidebar) sidebar.classList.remove('open');
-    if (detailPanel) detailPanel.classList.remove('mobile-open');
     document.getElementById('bn-map')?.classList.add('active');
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 300);
 
   } else if (view === 'detail') {
-    // Ferme sidebar, ouvre le panneau fiche
     if (sidebar) sidebar.classList.remove('open');
-    if (detailPanel) {
-      detailPanel.classList.add('mobile-open');
-      if (activeId !== null) {
-        try { switchTab('bien', document.getElementById('tab-bien')); } catch(e){}
-      }
-    }
     document.getElementById('bn-detail')?.classList.add('active');
+    // Bascule sur l'onglet Bien si besoin
+    if (activeId !== null) {
+      try { switchTab('bien', document.getElementById('tab-bien')); } catch(e){}
+    }
 
   } else if (view === 'letter') {
     if (sidebar) sidebar.classList.remove('open');
-    if (detailPanel) {
-      detailPanel.classList.add('mobile-open');
-      if (activeId !== null) {
-        try { switchTab('letter', document.getElementById('tab-letter')); } catch(e){}
-      }
-    }
     document.getElementById('bn-letter')?.classList.add('active');
+    if (activeId !== null) {
+      try { switchTab('letter', document.getElementById('tab-letter')); } catch(e){}
+    }
   }
 }
 
-// Ferme la sidebar quand on clique sur un bien (mobile)
+// Quand on sélectionne un bien sur mobile → ferme la sidebar, onglet Fiche actif
 function mobileOnBienSelect() {
   if (window.innerWidth > 768) return;
-  // Ferme la sidebar et ouvre la fiche
   const sidebar = document.getElementById('sidebar');
   if (sidebar) sidebar.classList.remove('open');
-  const detailPanel = document.getElementById('detail-panel');
-  if (detailPanel) detailPanel.classList.add('mobile-open');
   _mobileCurrentView = 'detail';
   ['bn-list','bn-map','bn-detail','bn-letter'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
   document.getElementById('bn-detail')?.classList.add('active');
   if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 250);
+}
+
+// Affiche le bouton Itinéraire dans la bottom nav quand disponible
+function mobileUpdateItinBtn() {
+  if (window.innerWidth > 768) return;
+  const hasLocalized = biens.some(b => b.geoStatus === 'ok');
+  const btn = document.getElementById('bn-itin');
+  if (btn) btn.style.display = hasLocalized ? 'flex' : 'none';
 }
 
 // ── Patch updateAgent → sauvegarde profil cloud (debounce 1.5s) ──
