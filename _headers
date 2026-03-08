@@ -1,0 +1,10 @@
+# GitHub Pages custom headers (Netlify format - also supported by some GH Pages configs)
+# Ce fichier force la suppression des Service Workers côté navigateur
+
+/FPDPEPRO/DPE_Prospection_SQH_v5_multi.html
+  Clear-Site-Data: "cache", "storage"
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/FPDPEPRO/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Content-Type: application/javascript
