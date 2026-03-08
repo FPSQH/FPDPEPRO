@@ -5,19 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>DPE Prospection SQH</title>
 <script>
-/* ── Désactivation définitive de tous les Service Workers ──────────
-   On ne veut AUCUN SW pour cette application.
-   Ce code désinstalle silencieusement tout SW existant (blob ou fichier)
-   et vide tous les caches. Il ne redirige PAS pour éviter les boucles. */
+/* Désinstalle tout Service Worker existant — aucun SW voulu sur ce site */
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then(function(regs) {
-    regs.forEach(function(r) { r.unregister(); });
+  navigator.serviceWorker.getRegistrations().then(function(r) {
+    r.forEach(function(sw) { sw.unregister(); });
   });
-  if ('caches' in window) {
-    caches.keys().then(function(keys) {
-      keys.forEach(function(k) { caches.delete(k); });
-    });
-  }
 }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -4542,16 +4534,23 @@ async function onLoginSuccess(user, isNewLogin) {
 
 async function handleLogout() {
   if (!confirm('Se déconnecter ?')) return;
-  biens = []; activeId = null;
+
+  // Nettoie l'état local immédiatement, sans attendre l'API
+  biens = []; activeId = null; _currentUser = null;
   try { renderSidebar(); showDetailEmpty(); } catch(e) {}
-  try {
-    // scope:'local' évite le 403 sur les sessions multi-onglets
-    await _supa.auth.signOut({ scope: 'local' });
-  } catch(e) { console.warn('signOut error (ignoré):', e); }
-  // Réinitialise l'état en mémoire et retourne au login
-  _currentUser = null;
+
+  // Appel API en arrière-plan (échec silencieux — la session JWT
+  // expirera naturellement même sans appel au serveur)
+  try { await _supa.auth.signOut({ scope: 'local' }); } catch(e) {}
+
+  // Retour à l'écran de login dans tous les cas
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
+  // Réinitialise le formulaire de login
+  const emailEl = document.getElementById('login-email');
+  const pwdEl   = document.getElementById('login-password');
+  if (emailEl) emailEl.value = '';
+  if (pwdEl)   pwdEl.value   = '';
 }
 
 // ── Profil agent ──────────────────────────────────────────────────
@@ -4676,16 +4675,24 @@ async function loadSessionsList() {
     container.innerHTML = '<div class="sessions-empty">Aucune session sauvegardée.<br><small>Chargez des biens puis cliquez sur "☁️ Sauvegarder".</small></div>';
     return;
   }
-  const rows = data.map(s => {
-    const d = new Date(s.updated_at).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', year:'numeric' });
+
+  // Stocke les noms dans un tableau global pour éviter l'injection
+  // de JSON.stringify dans les attributs HTML (bug guillemets doubles)
+  window._sessionNames = data.map(s => s.nom_session);
+
+  const rows = data.map((s, idx) => {
+    const d = new Date(s.updated_at).toLocaleString('fr-FR', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
     return `<div class="session-row">
       <div class="session-row-info">
         <div class="session-row-name">${_esc(s.nom_session)}</div>
         <div class="session-row-meta">Modifié le ${d}</div>
       </div>
       <div class="session-row-btns">
-        <button class="btn btn-green btn-sm" onclick="loadNamedSession(${JSON.stringify(s.nom_session)})">📂 Charger</button>
-        <button class="btn btn-outline btn-sm" style="color:var(--sqh-red);border-color:#f5c0c0;min-width:32px" onclick="deleteNamedSession(${JSON.stringify(s.nom_session)},this)">🗑</button>
+        <button class="btn btn-green btn-sm" onclick="loadNamedSession(window._sessionNames[${idx}])">📂 Charger</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--sqh-red);border-color:#f5c0c0;min-width:32px" onclick="deleteNamedSession(window._sessionNames[${idx}],this)">🗑</button>
       </div>
     </div>`;
   });
