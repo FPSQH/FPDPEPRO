@@ -1069,11 +1069,17 @@ let activeTab = 'info';
 let leafletMap = null;
 let markers = {};
 let agentInfo = {
+  prenom: '',
   nom: 'Votre Nom',
   agence: 'Square Habitat',
   telephone: '',
+  telephoneFixe: '',
   email: '',
 };
+// Retourne le nom complet "Prénom NOM"
+function agentFullName() {
+  return [agentInfo.prenom, agentInfo.nom].filter(Boolean).join(' ') || 'Votre Nom';
+}
 
 // ── BAN circuit-breaker ───────────────────────────────────────
 let _banFailCount = 0;
@@ -1735,12 +1741,16 @@ function showDetailEmpty() {
   document.getElementById('detail-body').innerHTML = `<div class="empty"><div class="empty-icon">🗺️</div><h3>Sélectionnez un bien</h3><p>Cliquez sur un bien dans la liste ou sur un marqueur de la carte.</p></div>`;
 }
 function openProfileModal() {
-  Object.keys(agentInfo).forEach(k => {
+  // Champs directs
+  ['prenom','nom','agence','telephone','telephoneFixe'].forEach(k => {
     const el = document.getElementById('profile-' + k);
-    if (el) el.value = agentInfo[k];
+    if (el) el.value = agentInfo[k] || '';
   });
+  // Email : affiche seulement la partie locale (avant @)
+  const emailLocal = document.getElementById('profile-email-local');
+  if (emailLocal) emailLocal.value = (agentInfo.email || '').replace(/@squarehabitat\.fr$/i, '');
   document.getElementById('profile-overlay').classList.add('open');
-  document.getElementById('profile-nom').focus();
+  document.getElementById('profile-prenom').focus();
 }
 function reportBug() {
   var subject = encodeURIComponent('APPLI PROSPECTION DPE');
@@ -1910,7 +1920,7 @@ function renderLetterTab(b) {
       <span class="badge badge-blue">📄 ${modelLabel}</span>
       ${withGL ? '<span class="badge badge-green">🏢 + Gestion locative</span>' : ''}
       ${b.nom ? `<span class="badge badge-gray">👤 ${b.civilite?b.civilite+' ':''}${b.nom}</span>` : ''}
-      <button class="btn btn-ghost btn-sm" onclick="openProfileModal()" style="margin-left:auto">⚙ ${agentInfo.nom||'Mon profil'}</button>
+      <button class="btn btn-ghost btn-sm" onclick="openProfileModal()" style="margin-left:auto">⚙ ${agentInfo.prenom||agentInfo.nom||'Mon profil'}</button>
     </div>
 
     <div class="letter-actions">
@@ -2025,9 +2035,9 @@ Je reste à votre entière disposition pour répondre à vos questions ou conven
 Dans l'attente de votre retour, je vous adresse, ${signoff}, mes cordiales salutations.
 
 
-${agentInfo.nom}
+${agentFullName()}
 Conseiller Commercial Immobilier — ${agentInfo.agence}
-📞 ${agentInfo.telephone}
+📞 ${agentInfo.telephone}${agentInfo.telephoneFixe ? ' | ' + agentInfo.telephoneFixe : ''}
 ✉ ${agentInfo.email}`;
 }
 
@@ -2151,9 +2161,10 @@ function printLetter() {
       </div>
     </div>
     <div class="lh-agent">
-      <strong>${agentInfo.nom || ''}</strong>
+      <strong>${agentFullName()}</strong>
       Conseiller Commercial Immobilier<br>
-      ${agentInfo.telephone ? '📞 ' + agentInfo.telephone + '<br>' : ''}
+      ${agentInfo.telephone ? '📞 ' + agentInfo.telephone + (agentInfo.telephoneFixe ? ' | ' + agentInfo.telephoneFixe : '') + '<br>' : ''}
+      ${agentInfo.telephoneFixe && !agentInfo.telephone ? '📞 ' + agentInfo.telephoneFixe + '<br>' : ''}
       ${agentInfo.email ? '✉ ' + agentInfo.email : ''}
     </div>
   </div>
@@ -2209,7 +2220,7 @@ function buildPrintBody(b, fallbackHtml) {
     <p>Dans l'attente de votre retour, je vous adresse, ${signoff}, mes cordiales salutations.</p>
     <br><br>
     <p style="font-family:Arial,sans-serif">
-      <strong>${agentInfo.nom}</strong><br>
+      <strong>${agentFullName()}</strong><br>
       Conseiller Commercial Immobilier — ${agentInfo.agence}<br>
       📞 ${agentInfo.telephone}<br>
       ✉ ${agentInfo.email}
@@ -2252,8 +2263,8 @@ function getLetterLines(b, today) {
   if (withGL) lines.push("", getGestionLocativeParagraph(b));
   lines.push("", `Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous, sans aucun engagement de votre part.`, "",
     `Dans l'attente de votre retour, je vous adresse, ${signoff}, mes cordiales salutations.`, "", "",
-    agentInfo.nom, `Conseiller Commercial Immobilier — ${agentInfo.agence}`,
-    `Tél. : ${agentInfo.telephone}`, `Email : ${agentInfo.email}`);
+    agentFullName(), `Conseiller Commercial Immobilier — ${agentInfo.agence}`,
+    `Tél. : ${agentInfo.telephone}${agentInfo.telephoneFixe ? ' | Fixe : ' + agentInfo.telephoneFixe : ''}`, `Email : ${agentInfo.email}`);
   return lines;
 }
 
@@ -2372,7 +2383,7 @@ function sendAllFiches() {
     '═'.repeat(48),
     '',
   ].join('\n');
-  var footer = '\n' + '═'.repeat(48) + '\nDPE Prospection — ' + (agentInfo.agence || '') + '\n' + (agentInfo.nom || '');
+  var footer = '\n' + '═'.repeat(48) + '\nDPE Prospection — ' + (agentInfo.agence || '') + '\n' + agentFullName();
   var body = header + filled.map(formatFicheText).join('\n\n') + footer;
   var subject = encodeURIComponent('Fiches de suivi prospection DPE — ' + filled.length + ' bien(s) — ' + today);
   window.location.href = 'mailto:?subject=' + subject + '&body=' + encodeURIComponent(body);
@@ -4296,10 +4307,18 @@ function showSessionToast(msg) {
       <button class="btn btn-ghost btn-sm" onclick="closeProfileModal()">✕</button>
     </div>
     <div class="profile-modal-body">
-      <div class="letter-form-row"><label>Votre nom</label><input id="profile-nom" type="text" oninput="updateAgent('nom',this.value)" placeholder="Prénom Nom"/></div>
+      <div class="letter-form-row"><label>Prénom</label><input id="profile-prenom" type="text" oninput="updateAgent('prenom',this.value)" placeholder="Frédéric"/></div>
+      <div class="letter-form-row"><label>Nom</label><input id="profile-nom" type="text" oninput="updateAgent('nom',this.value)" placeholder="DUPONT"/></div>
       <div class="letter-form-row"><label>Agence</label><input id="profile-agence" type="text" oninput="updateAgent('agence',this.value)" placeholder="Square Habitat"/></div>
-      <div class="letter-form-row"><label>Téléphone</label><input id="profile-telephone" type="text" oninput="updateAgent('telephone',this.value)" placeholder="02 96 00 00 00"/></div>
-      <div class="letter-form-row"><label>Email</label><input id="profile-email" type="email" oninput="updateAgent('email',this.value)" placeholder="contact@square-habitat.fr"/></div>
+      <div class="letter-form-row"><label>Tél. mobile</label><input id="profile-telephone" type="text" oninput="updateAgent('telephone',this.value)" placeholder="06 00 00 00 00"/></div>
+      <div class="letter-form-row"><label>Tél. fixe agence</label><input id="profile-telephoneFixe" type="text" oninput="updateAgent('telephoneFixe',this.value)" placeholder="02 96 00 00 00"/></div>
+      <div class="letter-form-row" style="align-items:center">
+        <label>Email</label>
+        <div style="display:flex;align-items:center;gap:4px;flex:1">
+          <input id="profile-email-local" type="text" oninput="updateAgent('email',this.value+'@squarehabitat.fr')" placeholder="prenom.nom" style="flex:1;min-width:0"/>
+          <span style="font-size:12px;font-weight:600;color:var(--sqh-gray4);white-space:nowrap">@squarehabitat.fr</span>
+        </div>
+      </div>
       <div style="display:flex;justify-content:flex-end;padding-top:4px">
         <button class="btn btn-green" onclick="closeProfileModal()">✓ Enregistrer</button>
       </div>
@@ -4609,10 +4628,12 @@ async function loadUserProfile(userId) {
   try {
     const { data } = await _supa.from('profiles').select('*').eq('id', userId).maybeSingle();
     if (data) {
-      if (data.nom_agent)  agentInfo.nom       = data.nom_agent;
-      if (data.agence)     agentInfo.agence    = data.agence;
-      if (data.telephone)  agentInfo.telephone = data.telephone;
-      if (data.email_pro)  agentInfo.email     = data.email_pro;
+      if (data.nom_agent)       agentInfo.nom            = data.nom_agent;
+      if (data.prenom)          agentInfo.prenom         = data.prenom;
+      if (data.agence)          agentInfo.agence         = data.agence;
+      if (data.telephone)       agentInfo.telephone      = data.telephone;
+      if (data.telephone_fixe)  agentInfo.telephoneFixe  = data.telephone_fixe;
+      if (data.email_pro)       agentInfo.email          = data.email_pro;
     }
   } catch(e) { console.warn('loadUserProfile failed:', e); }
 }
@@ -4621,12 +4642,14 @@ async function saveUserProfile() {
   if (!_currentUser) return;
   try {
     await _supa.from('profiles').upsert({
-      id:         _currentUser.id,
-      nom_agent:  agentInfo.nom,
-      agence:     agentInfo.agence,
-      telephone:  agentInfo.telephone,
-      email_pro:  agentInfo.email,
-      updated_at: new Date().toISOString(),
+      id:              _currentUser.id,
+      nom_agent:       agentInfo.nom,
+      prenom:          agentInfo.prenom,
+      agence:          agentInfo.agence,
+      telephone:       agentInfo.telephone,
+      telephone_fixe:  agentInfo.telephoneFixe,
+      email_pro:       agentInfo.email,
+      updated_at:      new Date().toISOString(),
     });
   } catch(e) { console.warn('saveUserProfile failed:', e); }
 }
