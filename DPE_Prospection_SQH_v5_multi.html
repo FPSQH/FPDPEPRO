@@ -2491,29 +2491,21 @@ function letterToDocxParagraphs(b) {
     spacing: { after: 200 },
   }));
 
-  // ── Intro + adresse ──────────────────────────────────────────────────────────
+  // ── Intro + adresse inline ───────────────────────────────────────────────────
   paras.push(new Paragraph({
-    children: [run(`Je me permets de vous contacter au sujet de ${typeBien} situé :`)],
-    spacing: { after: 100 },
+    children: [
+      run(`Je me permets de vous contacter au sujet de ${typeBien} situé : `),
+      new TextRun({ text: b.adresse, font: 'Georgia', size: 22, bold: true, color: DARK }),
+      run('.'),
+    ],
+    spacing: { after: 160 },
   }));
 
-  paras.push(new Paragraph({
-    children: [new TextRun({ text: b.adresse, font: 'Georgia', size: 22, bold: true, color: DARK })],
-    alignment: AlignmentType.CENTER,
-    shading: { type: ShadingType.CLEAR, fill: 'F5F5F5' },
-    border: {
-      top:    { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 6 },
-      bottom: { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 6 },
-      left:   { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 8 },
-      right:  { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 8 },
-    },
-    spacing: { before: 80, after: 220 },
-  }));
-
-  // ── Intro contextuelle ───────────────────────────────────────────────────────
+  // ── Intro contextuelle avec date DPE ────────────────────────────────────────
+  const dateDpe = b.date ? ` établi le <strong>${b.date}</strong>` : ' récemment établi';
   const introCtx = dpeGroup==='AB'
-    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
-    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
+    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`
+    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`;
   paras.push(bodyPara(introCtx));
 
   // ── Section DPE ──────────────────────────────────────────────────────────────
@@ -2531,38 +2523,42 @@ function letterToDocxParagraphs(b) {
   }
   paras.push(bodyPara(dpeText));
 
-  // Encart ADEME
+  // Encart ADEME (labels courts)
   const infoboxColor = (dpeGroup==='FG'||dpeGroup==='E') ? 'rouge' : 'teal';
   if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
     const dpeBoxLines = [];
-    if (b.ademe.conso_ep_m2) dpeBoxLines.push(`Consommation : ${b.ademe.conso_ep_m2} kWhep/m²/an`);
-    if (b.ademe.cout_annuel) dpeBoxLines.push(`Coût annuel estimé : ${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €`);
-    if (b.ademe.energie) dpeBoxLines.push(`Énergie principale : ${b.ademe.energie}`);
-    if (b.ademe.ges_m2) dpeBoxLines.push(`GES : ${b.ademe.ges_m2} kgeqCO₂/m²/an`);
+    if (b.ademe.conso_ep_m2) dpeBoxLines.push(`⚡ Conso. : ${b.ademe.conso_ep_m2} kWhep/m²/an`);
+    if (b.ademe.cout_annuel) dpeBoxLines.push(`💶 Coût annuel : ${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €`);
+    if (b.ademe.energie) dpeBoxLines.push(`🔥 Énergie : ${b.ademe.energie}`);
+    if (b.ademe.ges_m2) dpeBoxLines.push(`🌿 GES : ${b.ademe.ges_m2} kgeqCO₂/m²/an`);
     paras.push(...infoBox(dpeBoxLines, infoboxColor));
   }
 
   // ── Section Audit ────────────────────────────────────────────────────────────
   if (b.audit && b.audit.nAudit) {
     paras.push(sectionTitle('Audit énergétique & rénovation'));
-    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
-    paras.push(bodyPara(`Un audit énergétique (n° ${b.audit.nAudit}${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`));
+    const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
+    paras.push(bodyPara(`Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :`));
     (b.audit.scenarios || []).slice(0, 3).forEach(sc => {
+      const cout = Number(sc.cout||0).toLocaleString('fr-FR');
+      const gain = sc.gainPct || sc.gainMin || '?';
       paras.push(new Paragraph({
         children: [
-          new TextRun({ text: '→ ', font: 'Georgia', size: 22, color: TEAL, bold: true }),
-          new TextRun({ text: `${sc.categorie || 'Scénario'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
-          new TextRun({ text: ` : atteindre DPE `, font: 'Georgia', size: 22, color: BODY }),
-          new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
-          new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Georgia', size: 22, color: BODY }),
-          new TextRun({ text: `${sc.gainPct || sc.gainMin || '?'}%`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+          new TextRun({ text: '→ ', font: 'Arial', size: 20, color: GREEN, bold: true }),
+          new TextRun({ text: 'DPE ', font: 'Arial', size: 20, color: DARK }),
+          new TextRun({ text: `${sc.classeApres||'?'}`, font: 'Arial', size: 20, color: DARK, bold: true }),
+          new TextRun({ text: ` · ~${cout} €`, font: 'Arial', size: 20, color: DARK }),
+          new TextRun({ text: ' · gain ', font: 'Arial', size: 20, color: DARK }),
+          new TextRun({ text: `${gain}%`, font: 'Arial', size: 20, color: DARK, bold: true }),
         ],
-        indent: { left: 360 },
-        spacing: { after: 80 },
+        shading: { type: ShadingType.CLEAR, fill: 'EBF5EC' },
+        border: { left: { style: BorderStyle.THICK, size: 20, color: GREEN, space: 8 } },
+        indent: { left: 160 },
+        spacing: { after: 40 },
       }));
     });
     paras.push(...infoBox([
-      `En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.`,
+      `En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation.`,
       `🔗 j-ecorenove.credit-agricole.fr`,
     ], 'green'));
   }
@@ -2574,11 +2570,11 @@ function letterToDocxParagraphs(b) {
   // ── Section Vente ────────────────────────────────────────────────────────────
   let ventePara = '';
   if (dpeGroup==='FG' || dpeGroup==='E') {
-    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
+    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acquéreurs recherchent précisément des biens à rénover pour les valoriser à leur façon. Mon expertise du marché local me permet d'identifier les profils d'acheteurs adaptés et de vous accompagner vers une vente réussie — n'hésitez pas à me contacter pour en discuter.`;
   } else if (dpeGroup==='CD') {
-    ventePara = `Si vous envisagez de vendre ${typeBien}, votre DPE ${b.dpe} est un atout supplémentaire : les acheteurs sont de plus en plus sensibles aux performances énergétiques. Je serais ravi de vous accompagner et de vous proposer les meilleures conditions de vente.`;
+    ventePara = `Un DPE ${b.dpe} n'est pas un frein à la vente, bien au contraire : les acquéreurs sont de plus en plus attentifs aux performances énergétiques. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des profils les plus adaptés — contactez-moi pour en discuter sans engagement.`;
   } else {
-    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
+    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acquéreurs les plus exigeants — n'hésitez pas à me contacter pour un premier échange.`;
   }
   paras.push(sectionTitle('Vous envisagez de vendre ?'));
   paras.push(bodyPara(ventePara));
