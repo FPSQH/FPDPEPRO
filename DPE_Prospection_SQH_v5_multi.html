@@ -5,46 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>DPE Prospection SQH</title>
 <script>
-/* ── Nettoyage Service Worker (blob URL) ──────────────────────────
-   Stratégie double :
-   1) Si l'URL contient déjà ?purge= → on est en mode nettoyage,
-      on désinstalle tous les SW et on redirige vers l'URL propre.
-   2) Sinon, si un SW est actif (il sert peut-être une vieille page
-      depuis son cache), on redirige vers ?purge=<ts> pour bypasser
-      le cache du SW (le SW ne met en cache que les URLs exactes).     */
-(function() {
-  if (!('serviceWorker' in navigator)) return;
-  var url = location.href;
-
-  // Mode nettoyage : on est arrivé ici sans interférence du SW
-  if (url.indexOf('?purge=') !== -1 || url.indexOf('&purge=') !== -1) {
-    navigator.serviceWorker.getRegistrations().then(function(regs) {
-      var kills = regs.map(function(r) { return r.unregister(); });
-      return Promise.all(kills);
-    }).then(function() {
-      return 'caches' in window ? caches.keys().then(function(keys) {
-        return Promise.all(keys.map(function(k) { return caches.delete(k); }));
-      }) : Promise.resolve();
-    }).then(function() {
-      // Redirige vers l'URL propre sans le paramètre purge
-      var clean = url.replace(/[?&]purge=\d+/, '').replace(/\?$/, '').replace(/&$/, '');
-      sessionStorage.setItem('_sw_done', '1');
-      location.replace(clean);
-    });
-    return;
-  }
-
-  // Vérifie si un SW est actif et pas encore nettoyé
-  if (!sessionStorage.getItem('_sw_done')) {
-    navigator.serviceWorker.getRegistrations().then(function(regs) {
-      if (regs.length > 0) {
-        // Un SW tourne encore → bypass son cache avec ?purge=ts
-        var sep = url.indexOf('?') === -1 ? '?' : '&';
-        location.replace(url + sep + 'purge=' + Date.now());
-      }
+/* ── Désactivation définitive de tous les Service Workers ──────────
+   On ne veut AUCUN SW pour cette application.
+   Ce code désinstalle silencieusement tout SW existant (blob ou fichier)
+   et vide tous les caches. Il ne redirige PAS pour éviter les boucles. */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(r) { r.unregister(); });
+  });
+  if ('caches' in window) {
+    caches.keys().then(function(keys) {
+      keys.forEach(function(k) { caches.delete(k); });
     });
   }
-})();
+}
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
@@ -4570,7 +4544,14 @@ async function handleLogout() {
   if (!confirm('Se déconnecter ?')) return;
   biens = []; activeId = null;
   try { renderSidebar(); showDetailEmpty(); } catch(e) {}
-  await _supa.auth.signOut();
+  try {
+    // scope:'local' évite le 403 sur les sessions multi-onglets
+    await _supa.auth.signOut({ scope: 'local' });
+  } catch(e) { console.warn('signOut error (ignoré):', e); }
+  // Réinitialise l'état en mémoire et retourne au login
+  _currentUser = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
 }
 
 // ── Profil agent ──────────────────────────────────────────────────
@@ -4893,11 +4874,7 @@ function mobileUpdateItinBtn() {
   };
 })();
 
-// ── PWA Service Worker ──────────────────────────────────────────
-// (désinstallation de l'ancien SW gérée en haut du <head>)
-if ('serviceWorker' in navigator && location.protocol === 'https:' && location.hostname.includes('github.io')) {
-  navigator.serviceWorker.register('/FPDPEPRO/sw.js').catch(function() {});
-}
+// ── PWA Service Worker : désactivé (voir <head> pour le nettoyage) ──
 
 // ── Init au chargement ────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
