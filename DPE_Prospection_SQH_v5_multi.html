@@ -4753,25 +4753,9 @@ function mobileUpdateItinBtn() {
   };
 })();
 
-// ── PWA Service Worker (inline blob) ─────────────────────────────
+// ── PWA Service Worker ──────────────────────────────────────────
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  const swSrc = `
-const CACHE='sqh-v5';
-self.addEventListener('install',e=>{self.skipWaiting();});
-self.addEventListener('activate',e=>{
-  e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
-  self.clients.claim();
-});
-self.addEventListener('fetch',e=>{
-  if(e.request.url.includes('supabase')||e.request.method!=='GET') return;
-  e.respondWith(fetch(e.request).then(r=>{
-    const rc=r.clone();
-    caches.open(CACHE).then(c=>c.put(e.request,rc));
-    return r;
-  }).catch(()=>caches.match(e.request)));
-});`;
-  const blob = new Blob([swSrc],{type:'application/javascript'});
-  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+  navigator.serviceWorker.register('/FPDPEPRO/sw.js').catch(() => {});
 }
 
 // ── Init au chargement ────────────────────────────────────────────
