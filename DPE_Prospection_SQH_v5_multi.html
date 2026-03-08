@@ -5,30 +5,45 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>DPE Prospection SQH</title>
 <script>
-/* ── Nettoyage Service Worker ──────────────────────────────────────
-   L'ancien SW (blob URL) interceptait les fetches et essayait de
-   parser le HTML comme du JS → "Unexpected end of input".
-   Ce script s'exécute EN PREMIER, désinstalle tous les SW en cache,
-   vide les caches, puis recharge la page une seule fois proprement. */
+/* ── Nettoyage Service Worker (blob URL) ──────────────────────────
+   Stratégie double :
+   1) Si l'URL contient déjà ?purge= → on est en mode nettoyage,
+      on désinstalle tous les SW et on redirige vers l'URL propre.
+   2) Sinon, si un SW est actif (il sert peut-être une vieille page
+      depuis son cache), on redirige vers ?purge=<ts> pour bypasser
+      le cache du SW (le SW ne met en cache que les URLs exactes).     */
 (function() {
   if (!('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.getRegistrations().then(function(regs) {
-    if (regs.length === 0) return; // Rien à supprimer
-    // Désinstalle tous les SW actifs
-    var kills = regs.map(function(r) { return r.unregister(); });
-    Promise.all(kills).then(function() {
-      // Vide tous les caches SW
-      return caches.keys().then(function(keys) {
-        return Promise.all(keys.map(function(k) { return caches.delete(k); }));
-      });
+  var url = location.href;
+
+  // Mode nettoyage : on est arrivé ici sans interférence du SW
+  if (url.indexOf('?purge=') !== -1 || url.indexOf('&purge=') !== -1) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      var kills = regs.map(function(r) { return r.unregister(); });
+      return Promise.all(kills);
     }).then(function() {
-      // Recharge une seule fois (flag sessionStorage anti-boucle)
-      if (!sessionStorage.getItem('_sw_purged')) {
-        sessionStorage.setItem('_sw_purged', '1');
-        location.reload(true);
+      return 'caches' in window ? caches.keys().then(function(keys) {
+        return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+      }) : Promise.resolve();
+    }).then(function() {
+      // Redirige vers l'URL propre sans le paramètre purge
+      var clean = url.replace(/[?&]purge=\d+/, '').replace(/\?$/, '').replace(/&$/, '');
+      sessionStorage.setItem('_sw_done', '1');
+      location.replace(clean);
+    });
+    return;
+  }
+
+  // Vérifie si un SW est actif et pas encore nettoyé
+  if (!sessionStorage.getItem('_sw_done')) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      if (regs.length > 0) {
+        // Un SW tourne encore → bypass son cache avec ?purge=ts
+        var sep = url.indexOf('?') === -1 ? '?' : '&';
+        location.replace(url + sep + 'purge=' + Date.now());
       }
     });
-  });
+  }
 })();
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -2695,22 +2710,93 @@ let _itinRoute = [];
 
 function buildGoogleMapsUrl(route) {
   if (route.length < 2) return null;
-  const origin      = `${route[0].lat},${route[0].lon}`;
-  const destination = `${route[route.length-1].lat},${route[route.length-1].lon}`;
-  const waypoints   = route.slice(1,-1).map(p=>`${p.lat},${p.lon}`).join('|');
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
-  if (waypoints) url += `&waypoints=${waypoints}`;
+  // Si le premier point est la position GPS user, utiliser "Ma position" dans Google Maps
+  let originStr;
+  if (route[0].isUserStart) {
+    originStr = route[0].lat + ',' + route[0].lon; // Google Maps gérera la position
+  } else {
+    originStr = route[0].lat + ',' + route[0].lon;
+  }
+  const destination = route[route.length-1].lat + ',' + route[route.length-1].lon;
+  const waypoints   = route.slice(1,-1).filter(p => !p.isUserStart).map(p=>p.lat+','+p.lon).join('|');
+  let url = 'https://www.google.com/maps/dir/?api=1&origin=' + originStr + '&destination=' + destination + '&travelmode=driving';
+  if (waypoints) url += '&waypoints=' + waypoints;
   return url;
 }
 
 function showItinerary() {
   const localized = getActiveLocalized();
   if (localized.length < 2) { alert('Localisez au moins 2 biens avant de créer un itinéraire.'); return; }
-  _itinRoute = optimizeRoute(
-    localized.map(b => ({ id:b.id, lat:b.geo.lat, lon:b.geo.lon, adresse:b.adresse, dpe:b.dpe, surface:b.surface }))
+
+  // Sur mobile, propose de partir de la position GPS actuelle
+  const isMobile = window.innerWidth <= 768;
+  if (isMobile && navigator.geolocation) {
+    _buildItineraryWithGeo(localized);
+  } else {
+    _buildItinerary(localized, null);
+  }
+}
+
+function _buildItineraryWithGeo(localized) {
+  const btn = document.getElementById('bn-itin') || document.getElementById('btn-itin');
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) btn.innerHTML = '📍 Localisation…';
+
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      if (btn) btn.innerHTML = origText;
+      const userPoint = {
+        id: '__user__',
+        lat: pos.coords.latitude,
+        lon: pos.coords.longitude,
+        adresse: 'Ma position actuelle',
+        dpe: '?',
+        surface: '',
+        isUserStart: true,
+      };
+      _buildItinerary(localized, userPoint);
+    },
+    function(err) {
+      if (btn) btn.innerHTML = origText;
+      // En cas de refus ou erreur, itinéraire sans position GPS
+      _buildItinerary(localized, null);
+    },
+    { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
   );
+}
+
+function _buildItinerary(localized, userStartPoint) {
+  const points = localized.map(b => ({ id:b.id, lat:b.geo.lat, lon:b.geo.lon, adresse:b.adresse, dpe:b.dpe, surface:b.surface }));
+
+  let route;
+  if (userStartPoint) {
+    // Optimise à partir de la position GPS (fixe le départ, optimise le reste)
+    const optimized = optimizeRouteFrom(userStartPoint, points);
+    route = [userStartPoint, ...optimized];
+  } else {
+    route = optimizeRoute(points);
+  }
+
+  _itinRoute = route;
   renderItinPanel();
   document.getElementById('itin-panel').classList.add('open');
+}
+
+// Nearest-neighbor depuis un point de départ fixe
+function optimizeRouteFrom(startPoint, points) {
+  const unvisited = [...points];
+  const route = [];
+  let current = startPoint;
+  while (unvisited.length > 0) {
+    let bestIdx = 0, bestDist = Infinity;
+    unvisited.forEach((p, i) => {
+      const d = haversine(current.lat, current.lon, p.lat, p.lon);
+      if (d < bestDist) { bestDist = d; bestIdx = i; }
+    });
+    current = unvisited[bestIdx];
+    route.push(unvisited.splice(bestIdx, 1)[0]);
+  }
+  return route;
 }
 
 function removeItinPoint(id) {
@@ -4107,8 +4193,9 @@ function _restoreFullBiens(savedBiens, payload) {
   biens = savedBiens.map((b, i) => ({
     ...b,
     id: i,
-    geo: null,
-    geoStatus: 'none',
+    // Restaure les coordonnées géo si elles ont été sauvegardées
+    geo: b.geo || null,
+    geoStatus: b.geo ? 'ok' : 'none',
     visible: true,
   }));
 
@@ -4129,7 +4216,18 @@ function _restoreFullBiens(savedBiens, payload) {
   sortState = { field: 'dpe', dir: 1 };
   setSort('dpe');
   try { persistSuivis(); } catch(e) {}
-  geolocateAll();
+
+  // Place les marqueurs sur la carte pour les biens déjà géolocalisés
+  const alreadyGeo = biens.filter(b => b.geo);
+  if (alreadyGeo.length > 0) {
+    alreadyGeo.forEach(b => addMarker(b));
+    fitMapToBiens();
+    updateGeoStatusText();
+    updateItinButton();
+  }
+  // Géolocalise uniquement les biens sans coordonnées
+  const missing = biens.filter(b => !b.geo);
+  if (missing.length > 0) geolocateAll();
 }
 
 function showSessionToast(msg) {
@@ -4514,6 +4612,7 @@ async function persistSuiviCloud() {
       _numeroDpe: b._numeroDpe || null,
       checked: b.checked, suivi: b.suivi || {},
       ademe: b.ademe || null, audit: b.audit || null,
+      geo: b.geo || null, geoStatus: b.geo ? 'ok' : (b.geoStatus || 'none'),
     }));
     const biensPayload = { version: 3, date: new Date().toISOString(), agentInfo, biens: savedBiens };
 
@@ -4543,15 +4642,20 @@ async function persistSuiviCloud() {
 async function restoreSuivisFromCloud() {
   if (!_currentUser) return;
   try {
+    // Charge la session la plus récente toutes sessions confondues
+    // (autosave ou nommée) — permet de reprendre sur n'importe quel appareil
     const { data } = await _supa.from('sessions')
-      .select('biens')
+      .select('nom_session, biens, updated_at')
       .eq('user_id', _currentUser.id)
-      .eq('nom_session', '__autosave__')
-      .maybeSingle();
-    if (!data?.biens?.biens?.length) return;
-    const payload = data.biens;
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (!data?.length || !data[0].biens?.biens?.length) return;
+    const row = data[0];
+    const payload = row.biens;
     _restoreFullBiens(payload.biens, payload);
-    showSessionToast('☁️ Session cloud restaurée — ' + payload.biens.length + ' biens');
+    const nomAffiche = row.nom_session === '__autosave__' ? 'sauvegarde auto' : '"' + row.nom_session + '"';
+    const ts = new Date(row.updated_at).toLocaleString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    showSessionToast('☁️ Reprise de ' + nomAffiche + ' (' + ts + ') — ' + payload.biens.length + ' biens');
   } catch(e) { console.warn('Cloud restore failed:', e); }
 }
 
@@ -4567,7 +4671,9 @@ function showCloudBadge() {
 function openSessionsModal() {
   document.getElementById('sessions-overlay').classList.add('open');
   const d = new Date();
-  const suggestion = 'Session-' + d.toLocaleDateString('fr-FR').replace(/\//g, '-');
+  const hh = String(d.getHours()).padStart(2,'0');
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  const suggestion = 'Session-' + d.toLocaleDateString('fr-FR').replace(/\//g, '-') + '-' + hh + 'h' + mm;
   document.getElementById('session-save-name').value = suggestion;
   loadSessionsList();
 }
@@ -4687,10 +4793,17 @@ async function loadNamedSession(nom) {
 }
 
 async function deleteNamedSession(nom, btn) {
+  if (!_currentUser) return;
   if (!confirm('Supprimer la session "' + nom + '" ?')) return;
-  if (btn) btn.disabled = true;
-  await _supa.from('sessions').delete().eq('user_id', _currentUser.id).eq('nom_session', nom);
-  loadSessionsList();
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  try {
+    const { error } = await _supa.from('sessions')
+      .delete()
+      .eq('user_id', _currentUser.id)
+      .eq('nom_session', nom);
+    if (error) { alert('Erreur suppression : ' + error.message); }
+  } catch(e) { alert('Erreur : ' + e.message); }
+  await loadSessionsList();
 }
 
 // ── Sidebar mobile drawer ─────────────────────────────────────────
