@@ -312,13 +312,19 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 .ltr-infobox--teal{background:#E8F6F6;border-color:#009597;color:#0a3d3d}
 .ltr-infobox--green{background:#EBF5EC;border-color:#006A4E;color:#0a2e1d}
 .ltr-infobox strong{font-weight:700}
-.ltr-p{margin-bottom:10px;line-height:1.75}
+.ltr-grid2{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px}
+.ltr-sc-line{font-size:10.5px;padding:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ltr-p{margin-bottom:8px;line-height:1.65}
 .ltr-addr{
   text-align:center;font-weight:700;font-size:13px;
   margin:14px 0;padding:7px 14px;
   border:1px solid var(--sqh-gray3);border-radius:5px;background:#F4F6F5
 }
-.ltr-signature{font-family:Arial,sans-serif;font-size:11px;line-height:1.65;margin-top:18px}
+.ltr-signature{font-family:Arial,sans-serif;font-size:11px;line-height:1.65;margin-top:14px}
+.ltr-header-preview{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;margin-bottom:14px;border-bottom:2.5px solid #009597}
+.ltr-header-preview img{height:30px;width:auto}
+.ltr-header-preview-agent{text-align:right;font-family:Arial,sans-serif;font-size:10px;color:#3D5044;line-height:1.5}
+.ltr-header-preview-agent strong{display:block;font-size:11px;color:#1E2A22}
 .letter-form-row{display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
 .letter-form-row label{font-size:11px;font-weight:600;color:var(--sqh-gray4);width:90px;flex-shrink:0}
 .letter-form-row input{
@@ -1954,7 +1960,7 @@ function renderLetterTab(b) {
       <button class="btn btn-outline" onclick="downloadWordOne()">📄 Word — ce bien</button>
       <button class="btn btn-green" onclick="downloadWordAll()" style="background:var(--sqh-green-d)">📄 Word — ${biens.filter(x=>x.checked).length>0?'biens cochés':'tous les biens'}</button>
     </div>
-    <div class="letter-box" id="letter-content">${generateLetter(b)}</div>
+    <div class="letter-box" id="letter-content"><div class="ltr-header-preview"><img src="LOGO_ALLONGE_COULEUR.png" alt="Square Habitat" onerror="this.style.display='none'"/><div class="ltr-header-preview-agent"><strong>${agentFullName()}</strong>Conseiller Commercial Immobilier<br>${agentInfo.agence||'Square Habitat'}</div></div>${generateLetter(b)}</div>
   </div>`;
 }
 
@@ -1962,7 +1968,7 @@ function renderLetterTab(b) {
 function updateAgent(key, val) {
   agentInfo[key] = val;
   const lc = document.getElementById('letter-content');
-  if (lc && activeId !== null) lc.innerHTML = generateLetter(biens[activeId]);
+  if (lc && activeId !== null) lc.innerHTML = `<div class="ltr-header-preview"><img src="LOGO_ALLONGE_COULEUR.png" alt="Square Habitat" onerror="this.style.display='none'"/><div class="ltr-header-preview-agent"><strong>${agentFullName()}</strong>Conseiller Commercial Immobilier<br>${agentInfo.agence||'Square Habitat'}</div></div>${generateLetter(biens[activeId])}`;
 }
 
 // ── Letter generation ──────────────────────────────────────────────────────────
@@ -2030,11 +2036,12 @@ function generateLetter(b) {
   const typeBien = isAppt ? 'votre appartement' : 'votre bien';
   const secteurLabel = b.secteur ? ` (secteur ${b.secteur})` : '';
   const contextSecteur = ville ? `sur le secteur de ${ville}${secteurLabel}` : 'dans notre secteur';
+  const dateDpe = b.date ? ` établi le <strong>${b.date}</strong>` : ' récemment établi';
 
   /* ── Intro contextuelle ── */
   const introCtx = dpeGroup==='AB'
-    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
-    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
+    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`
+    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`;
 
   /* ── Paragraphe DPE enrichi ── */
   const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
@@ -2049,43 +2056,42 @@ function generateLetter(b) {
     dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui constitue un vrai atout sur le marché actuel. Les acheteurs sont de plus en plus sensibles aux performances énergétiques, et un bon classement DPE valorise significativement ${typeBien} lors d'une mise en vente ou d'une mise en location.`;
   }
 
-  /* ── Encart DPE ── */
+  /* ── Encart DPE 2 colonnes ── */
   const infoboxColor = (dpeGroup==='FG'||dpeGroup==='E') ? 'rouge' : 'teal';
   let dpeBox = '';
   if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
     const parts = [];
-    if (b.ademe.conso_ep_m2) parts.push(`⚡ Consommation : <strong>${b.ademe.conso_ep_m2} kWhep/m²/an</strong>`);
-    if (b.ademe.cout_annuel) parts.push(`💶 Coût annuel estimé : <strong>${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €</strong>`);
-    if (b.ademe.energie) parts.push(`🔥 Énergie principale : <strong>${b.ademe.energie}</strong>`);
+    if (b.ademe.conso_ep_m2) parts.push(`⚡ Conso. : <strong>${b.ademe.conso_ep_m2} kWhep/m²/an</strong>`);
+    if (b.ademe.cout_annuel) parts.push(`💶 Coût annuel : <strong>${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €</strong>`);
+    if (b.ademe.energie) parts.push(`🔥 Énergie : <strong>${b.ademe.energie}</strong>`);
     if (b.ademe.ges_m2) parts.push(`🌿 GES : <strong>${b.ademe.ges_m2} kgeqCO₂/m²/an</strong>`);
-    dpeBox = `<div class="ltr-infobox ltr-infobox--${infoboxColor}">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+    dpeBox = `<div class="ltr-infobox ltr-infobox--${infoboxColor}"><div class="ltr-grid2">${parts.map(p=>`<div>${p}</div>`).join('')}</div></div>`;
   }
 
-  /* ── Encart Audit ── */
+  /* ── Encart Audit compact ── */
   let auditBlock = '';
   if (b.audit && b.audit.nAudit) {
     const scLines = (b.audit.scenarios || []).slice(0, 3).map(sc =>
-      `→ <strong>${sc.categorie || 'Scénario'}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
-    ).join('<br>');
-    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
+      `<div class="ltr-sc-line">→ <strong>${sc.classeApres||'?'}</strong> · ~${Number(sc.cout||0).toLocaleString('fr-FR')} € · gain <strong>${sc.gainPct||sc.gainMin||'?'}%</strong></div>`
+    ).join('');
+    const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
     auditBlock = `
     <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
-    <p class="ltr-p">Un audit énergétique (n° <strong>${b.audit.nAudit}</strong>${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :</p>
+    <p class="ltr-p">Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :</p>
     <div class="ltr-infobox ltr-infobox--green">
       ${scLines}
-      <br><br>En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.<br>
-      🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a>
+      <div style="margin-top:4pt">En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation. 🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a></div>
     </div>`;
   }
 
   /* ── Paragraphe vente enrichi ── */
   let ventePara = '';
   if (dpeGroup==='FG' || dpeGroup==='E') {
-    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
+    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acquéreurs recherchent précisément des biens à rénover pour les valoriser à leur façon. Mon expertise du marché local me permet d'identifier les profils d'acheteurs adaptés et de vous accompagner vers une vente réussie — n'hésitez pas à me contacter pour en discuter.`;
   } else if (dpeGroup==='CD') {
-    ventePara = `Si vous envisagez de vendre ${typeBien}, votre DPE ${b.dpe} est un atout supplémentaire : les acheteurs sont de plus en plus sensibles aux performances énergétiques. Je serais ravi de vous accompagner et de vous proposer les meilleures conditions de vente.`;
+    ventePara = `Un DPE ${b.dpe} n'est pas un frein à la vente, bien au contraire : les acquéreurs sont de plus en plus attentifs aux performances énergétiques. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des profils les plus adaptés — contactez-moi pour en discuter sans engagement.`;
   } else {
-    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
+    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acquéreurs les plus exigeants — n'hésitez pas à me contacter pour un premier échange.`;
   }
 
   /* ── Gestion locative ── */
@@ -2095,8 +2101,7 @@ function generateLetter(b) {
 
 <p class="ltr-salut">${salut}</p>
 
-<p class="ltr-p">Je me permets de vous contacter au sujet de ${typeBien} situé :</p>
-<p class="ltr-addr">${b.adresse}</p>
+<p class="ltr-p">Je me permets de vous contacter au sujet de ${typeBien} situé : <strong>${b.adresse}</strong>.</p>
 
 <p class="ltr-p">${introCtx}</p>
 
@@ -2157,12 +2162,12 @@ function printLetter() {
 <meta charset="UTF-8"/>
 <title>Courrier — ${adresse}</title>
 <style>
-  @page { size: A4; margin: 14mm 16mm 14mm 22mm; }
+  @page { size: A4; margin: 10mm 14mm 10mm 18mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: 9.5pt;
-    line-height: 1.5;
+    font-size: 9pt;
+    line-height: 1.4;
     color: #1a1714;
     background: white;
   }
@@ -2172,51 +2177,51 @@ function printLetter() {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    padding-bottom: 9pt;
-    margin-bottom: 12pt;
+    padding-bottom: 7pt;
+    margin-bottom: 9pt;
     border-bottom: 2pt solid #038B92;
   }
-  .lh-brand { display: flex; align-items: center; gap: 8pt; }
+  .lh-brand { display: flex; align-items: center; gap: 6pt; }
   .lh-logo-img-wrap {
     flex-shrink: 0;
     display: flex; align-items: center;
   }
   .lh-name { font-family: Arial, sans-serif; }
-  .lh-name .sub { font-size: 8pt; color: #878A8D; margin-top: 1pt; }
+  .lh-name .sub { font-size: 7.5pt; color: #878A8D; margin-top: 1pt; }
   .lh-agent {
     text-align: right;
     font-family: Arial, sans-serif;
-    font-size: 8pt;
+    font-size: 7.5pt;
     color: #3D5044;
-    line-height: 1.5;
+    line-height: 1.4;
   }
-  .lh-agent strong { display: block; font-size: 9pt; color: #1E2A22; }
+  .lh-agent strong { display: block; font-size: 8.5pt; color: #1E2A22; }
 
   /* ── Corps ── */
   .lh-body { max-width: 100%; }
-  p { margin-bottom: 7pt; }
+  p { margin-bottom: 5pt; }
   p:empty { display: none; }
   strong { font-weight: 700; }
 
   /* ── Date ── */
-  p.ltr-date { text-align:right; font-family:Arial,sans-serif; font-size:8.5pt; color:#3D5044; margin-bottom:10pt; }
+  p.ltr-date { text-align:right; font-family:Arial,sans-serif; font-size:8pt; color:#3D5044; margin-bottom:8pt; }
 
   /* ── Formule d'appel ── */
-  p.ltr-salut { font-style:italic; margin-bottom:8pt; }
+  p.ltr-salut { font-style:italic; margin-bottom:6pt; }
 
   /* ── Paragraphe standard ── */
-  p.ltr-p { margin-bottom:7pt; }
+  p.ltr-p { margin-bottom:5pt; line-height:1.45; }
 
   /* ── Signature ── */
-  p.ltr-signature { font-family:Arial,sans-serif; font-size:9pt; margin-top:10pt; line-height:1.6; }
+  p.ltr-signature { font-family:Arial,sans-serif; font-size:8.5pt; margin-top:8pt; line-height:1.5; }
 
-  /* ── Adresse encadrée ── */
+  /* ── Adresse encadrée (legacy) ── */
   p.ltr-addr, p.addr-block {
     text-align: center;
     font-weight: 700;
-    font-size: 10pt;
-    margin: 10pt 0;
-    padding: 5pt 12pt;
+    font-size: 9.5pt;
+    margin: 7pt 0;
+    padding: 4pt 10pt;
     border: 1pt solid #C4CFC8;
     border-radius: 4pt;
     background: #F4F6F5;
@@ -2226,9 +2231,9 @@ function printLetter() {
   p.addr-block {
     text-align: center;
     font-weight: 700;
-    font-size: 10pt;
-    margin: 10pt 0;
-    padding: 5pt 12pt;
+    font-size: 9.5pt;
+    margin: 7pt 0;
+    padding: 4pt 10pt;
     border: 1pt solid #C4CFC8;
     border-radius: 4pt;
     background: #F4F6F5;
@@ -2237,24 +2242,26 @@ function printLetter() {
   /* ── Sections enrichies ── */
   .ltr-section-title {
     font-family: Arial, sans-serif;
-    font-size: 7.5pt;
+    font-size: 7pt;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .5px;
     color: #009597;
     border-left: 3pt solid #009597;
     padding-left: 6pt;
-    margin: 9pt 0 4pt;
+    margin: 7pt 0 3pt;
   }
   .ltr-infobox {
-    padding: 5pt 9pt;
-    margin: 3pt 0 7pt;
+    padding: 4pt 8pt;
+    margin: 2pt 0 5pt;
     font-family: Arial, sans-serif;
-    font-size: 8pt;
-    line-height: 1.55;
+    font-size: 7.5pt;
+    line-height: 1.45;
     border-left: 3pt solid;
     border-radius: 3pt;
   }
+  .ltr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1pt 10pt; }
+  .ltr-sc-line { font-size: 7.5pt; padding: 1pt 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ltr-infobox--rouge { background: #FDEDEB; border-color: #C0392B; color: #5a1a12; }
   .ltr-infobox--teal  { background: #E8F6F6; border-color: #009597; color: #0a3d3d; }
   .ltr-infobox--green { background: #EBF5EC; border-color: #006A4E; color: #0a2e1d; }
@@ -2262,14 +2269,14 @@ function printLetter() {
 
   /* ── Pied de page ── */
   .lh-footer {
-    margin-top: 14pt;
-    padding-top: 7pt;
+    margin-top: 10pt;
+    padding-top: 5pt;
     border-top: 1pt solid #C4CFC8;
     font-family: Arial, sans-serif;
-    font-size: 7.5pt;
+    font-size: 7pt;
     color: #878A8D;
     text-align: center;
-    line-height: 1.5;
+    line-height: 1.4;
   }
 
   @media print {
