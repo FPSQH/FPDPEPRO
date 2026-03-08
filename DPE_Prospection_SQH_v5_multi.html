@@ -2410,30 +2410,204 @@ function getLetterLines(b, today) {
 }
 
 function letterToDocxParagraphs(b) {
-  const { Document, Paragraph, TextRun, AlignmentType, PageBreak, BorderStyle } = docx;
+  const { Paragraph, TextRun, AlignmentType, PageBreak, BorderStyle, ShadingType } = docx;
   const today = new Date().toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
-  const lines = getLetterLines(b, today);
-  return lines.map(line => {
-    if (line === '---PAGE_BREAK---') return new Paragraph({ children: [new PageBreak()] });
-    const isAddr = line.startsWith('__ADDR__');
-    const isSectionTitle = /^\[.+\]$/.test(line);
-    const isArrow = line.startsWith('→');
-    const text = isAddr ? line.replace('__ADDR__','') : line;
-    const size = isAddr ? 26 : isSectionTitle ? 22 : 24;
-    const color = isSectionTitle ? '009597' : isAddr ? '1A1A1A' : '2a2a2a';
-    const font = isSectionTitle ? 'Arial' : 'Georgia';
-    return new Paragraph({
-      alignment: isAddr ? AlignmentType.CENTER : AlignmentType.LEFT,
-      spacing: { after: (line==='' || isSectionTitle) ? 80 : 60 },
-      indent: isArrow ? { left: 360 } : undefined,
-      children: [new TextRun({
-        text: isSectionTitle ? text.slice(1,-1).toUpperCase() : text,
-        bold: isAddr || isSectionTitle,
-        size, font, color,
-        allCaps: isSectionTitle,
-      })]
-    });
+  const ville = getCityForLetter(b);
+  const salut = getSalutation(b, false);
+  const signoff = getSalutation(b, true);
+  const withGL = mentionGestionLocative(b);
+  const { isAppt, dpeGroup } = getLetterModel(b);
+  const typeBien = isAppt ? 'votre appartement' : 'votre bien';
+  const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
+  const secteurLabel = b.secteur ? ` (secteur ${b.secteur})` : '';
+  const contextSecteur = ville ? `sur le secteur de ${ville}${secteurLabel}` : 'dans notre secteur';
+
+  const TEAL = '009597', GREEN = '006A4E', RED = 'C0392B', DARK = '1A1A1A', GREY = '706F6F', BODY = '2a2a2a';
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  const run = (text, opts={}) => new TextRun({ text, font: 'Georgia', size: 22, color: BODY, ...opts });
+
+  // Parse <strong> tags into bold TextRun segments
+  const richRuns = (text, baseOpts={}) => {
+    const runs = [];
+    const parts = text.split(/(<strong>|<\/strong>)/);
+    let bold = false;
+    for (const part of parts) {
+      if (part === '<strong>') { bold = true; continue; }
+      if (part === '</strong>') { bold = false; continue; }
+      if (part) runs.push(new TextRun({ text: part, font: 'Georgia', size: 22, color: BODY, bold, ...baseOpts }));
+    }
+    return runs;
+  };
+
+  const bodyPara = (text, opts={}) => new Paragraph({
+    children: richRuns(text),
+    spacing: { after: 140 },
+    ...opts,
   });
+
+  const emptyLine = (after=120) => new Paragraph({ children: [new TextRun('')], spacing: { after } });
+
+  const sectionTitle = (text) => new Paragraph({
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, font: 'Arial', size: 19, color: TEAL })],
+    spacing: { before: 220, after: 100 },
+    border: { left: { style: BorderStyle.THICK, size: 20, color: TEAL, space: 8 } },
+    indent: { left: 160 },
+  });
+
+  // Colored info box — array of text lines
+  const infoBox = (lines, color) => {
+    const bgMap = { rouge: 'FDEDEB', teal: 'E8F6F6', green: 'EBF5EC' };
+    const borderMap = { rouge: RED, teal: TEAL, green: GREEN };
+    const bg = bgMap[color]; const bc = borderMap[color];
+    return lines.map((line, i) => new Paragraph({
+      children: [new TextRun({ text: line, font: 'Arial', size: 19, color: DARK })],
+      shading: { type: ShadingType.CLEAR, fill: bg },
+      border: { left: { style: BorderStyle.THICK, size: 20, color: bc, space: 8 } },
+      indent: { left: 160 },
+      spacing: { after: i < lines.length - 1 ? 40 : 120 },
+    }));
+  };
+
+  const paras = [];
+
+  // ── Date ────────────────────────────────────────────────────────────────────
+  paras.push(new Paragraph({
+    children: [run(`${ville ? ville + ', le ' : 'Le '}${today}`)],
+    alignment: AlignmentType.RIGHT,
+    spacing: { after: 340 },
+  }));
+
+  // ── Salutation ───────────────────────────────────────────────────────────────
+  paras.push(new Paragraph({
+    children: [run(salut, { italics: true })],
+    spacing: { after: 200 },
+  }));
+
+  // ── Intro + adresse ──────────────────────────────────────────────────────────
+  paras.push(new Paragraph({
+    children: [run(`Je me permets de vous contacter au sujet de ${typeBien} situé :`)],
+    spacing: { after: 100 },
+  }));
+
+  paras.push(new Paragraph({
+    children: [new TextRun({ text: b.adresse, font: 'Georgia', size: 22, bold: true, color: DARK })],
+    alignment: AlignmentType.CENTER,
+    shading: { type: ShadingType.CLEAR, fill: 'F5F5F5' },
+    border: {
+      top:    { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 6 },
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 6 },
+      left:   { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 8 },
+      right:  { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 8 },
+    },
+    spacing: { before: 80, after: 220 },
+  }));
+
+  // ── Intro contextuelle ───────────────────────────────────────────────────────
+  const introCtx = dpeGroup==='AB'
+    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
+    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
+  paras.push(bodyPara(introCtx));
+
+  // ── Section DPE ──────────────────────────────────────────────────────────────
+  paras.push(sectionTitle('Situation énergétique de votre bien'));
+
+  let dpeText = '';
+  if (dpeGroup==='FG') {
+    dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui le place dans la catégorie des logements à forte consommation énergétique — communément appelés « passoires thermiques ». Depuis le 1er janvier ${b.dpe==='G'?'2023':'2025'}, ce type de logement ne peut plus être mis en location. Face à cette contrainte réglementaire, de nombreux propriétaires font le choix de céder leur bien dans de bonnes conditions, avant que les obligations de rénovation ne se renforcent davantage.`;
+  } else if (dpeGroup==='E') {
+    dpeText = `${Bien} est classé <strong>DPE E</strong>. Depuis 2023, les loyers de ce type de logement sont gelés : il n'est plus possible de les réviser à la hausse, ni lors d'un renouvellement de bail, ni entre deux locataires. De plus, à horizon 2034, ces biens seront soumis aux mêmes restrictions que les classes F et G. Il peut donc être judicieux d'évaluer vos options dès maintenant.`;
+  } else if (dpeGroup==='CD') {
+    dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>. Bien que cette classe ne soit pas encore soumise à des restrictions immédiates, le contexte réglementaire évolue rapidement. Le marché immobilier local est actuellement dynamique, et c'est souvent dans ces périodes favorables que se réalisent les meilleures transactions.`;
+  } else {
+    dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui constitue un vrai atout sur le marché actuel. Les acheteurs sont de plus en plus sensibles aux performances énergétiques, et un bon classement DPE valorise significativement ${typeBien} lors d'une mise en vente ou d'une mise en location.`;
+  }
+  paras.push(bodyPara(dpeText));
+
+  // Encart ADEME
+  const infoboxColor = (dpeGroup==='FG'||dpeGroup==='E') ? 'rouge' : 'teal';
+  if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
+    const dpeBoxLines = [];
+    if (b.ademe.conso_ep_m2) dpeBoxLines.push(`Consommation : ${b.ademe.conso_ep_m2} kWhep/m²/an`);
+    if (b.ademe.cout_annuel) dpeBoxLines.push(`Coût annuel estimé : ${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €`);
+    if (b.ademe.energie) dpeBoxLines.push(`Énergie principale : ${b.ademe.energie}`);
+    if (b.ademe.ges_m2) dpeBoxLines.push(`GES : ${b.ademe.ges_m2} kgeqCO₂/m²/an`);
+    paras.push(...infoBox(dpeBoxLines, infoboxColor));
+  }
+
+  // ── Section Audit ────────────────────────────────────────────────────────────
+  if (b.audit && b.audit.nAudit) {
+    paras.push(sectionTitle('Audit énergétique & rénovation'));
+    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
+    paras.push(bodyPara(`Un audit énergétique (n° ${b.audit.nAudit}${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`));
+    (b.audit.scenarios || []).slice(0, 3).forEach(sc => {
+      paras.push(new Paragraph({
+        children: [
+          new TextRun({ text: '→ ', font: 'Georgia', size: 22, color: TEAL, bold: true }),
+          new TextRun({ text: `${sc.categorie || 'Scénario'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+          new TextRun({ text: ` : atteindre DPE `, font: 'Georgia', size: 22, color: BODY }),
+          new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+          new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Georgia', size: 22, color: BODY }),
+          new TextRun({ text: `${sc.gainPct || sc.gainMin || '?'}%`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+        ],
+        indent: { left: 360 },
+        spacing: { after: 80 },
+      }));
+    });
+    paras.push(...infoBox([
+      `En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.`,
+      `🔗 j-ecorenove.credit-agricole.fr`,
+    ], 'green'));
+  }
+
+  // ── Section Estimation ───────────────────────────────────────────────────────
+  paras.push(sectionTitle('Estimation gratuite de votre bien'));
+  paras.push(bodyPara(`Pour vous accompagner dans votre réflexion, je vous propose de réaliser une estimation gratuite et sans engagement de ${typeBien}. Cette estimation, établie à partir des ventes récentes de biens comparables dans votre secteur, vous donnera une vision claire de la valeur actuelle de votre propriété sur le marché.`));
+
+  // ── Section Vente ────────────────────────────────────────────────────────────
+  let ventePara = '';
+  if (dpeGroup==='FG' || dpeGroup==='E') {
+    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
+  } else if (dpeGroup==='CD') {
+    ventePara = `Si vous envisagez de vendre ${typeBien}, votre DPE ${b.dpe} est un atout supplémentaire : les acheteurs sont de plus en plus sensibles aux performances énergétiques. Je serais ravi de vous accompagner et de vous proposer les meilleures conditions de vente.`;
+  } else {
+    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
+  }
+  paras.push(sectionTitle('Vous envisagez de vendre ?'));
+  paras.push(bodyPara(ventePara));
+
+  // ── Section Gestion locative ─────────────────────────────────────────────────
+  if (withGL) {
+    paras.push(sectionTitle('Notre service de gestion locative'));
+    paras.push(bodyPara(getGestionLocativeParagraph(b)));
+  }
+
+  // ── Politesse ────────────────────────────────────────────────────────────────
+  paras.push(emptyLine(80));
+  paras.push(bodyPara(`Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous, sans aucun engagement de votre part.`));
+  paras.push(emptyLine(60));
+  paras.push(bodyPara(`Dans l'attente de votre retour, je vous adresse, ${signoff}, mes cordiales salutations.`));
+
+  // ── Signature ────────────────────────────────────────────────────────────────
+  paras.push(emptyLine(200));
+  paras.push(new Paragraph({
+    children: [new TextRun({ text: agentFullName(), font: 'Arial', size: 22, bold: true, color: DARK })],
+    spacing: { after: 50 },
+  }));
+  paras.push(new Paragraph({
+    children: [new TextRun({ text: `Conseiller Commercial Immobilier — ${agentInfo.agence}`, font: 'Arial', size: 20, color: GREY })],
+    spacing: { after: 50 },
+  }));
+  const tel = [agentInfo.telephone, agentInfo.telephoneFixe].filter(Boolean).join(' | Fixe : ');
+  if (tel) paras.push(new Paragraph({
+    children: [new TextRun({ text: `Tél. : ${tel}`, font: 'Arial', size: 20, color: BODY })],
+    spacing: { after: 50 },
+  }));
+  if (agentInfo.email) paras.push(new Paragraph({
+    children: [new TextRun({ text: `Email : ${agentInfo.email}`, font: 'Arial', size: 20, color: BODY })],
+  }));
+
+  return paras;
 }
 
 async function buildDocxFromBiens(biensList) {
