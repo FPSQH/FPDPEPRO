@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <title>DPE Prospection SQH</title>
 <script>
 /* Désinstalle tout Service Worker existant — aucun SW voulu sur ce site */
@@ -384,7 +384,7 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 .suivi-statut-chip[data-val="À recontacter"].active{background:#e08000;border-color:#e08000}
 .suivi-statut-chip[data-val="Mandat signé"].active{background:#1a5c38;border-color:#1a5c38}
 .suivi-statut-chip[data-val="Prescri CA"].active{background:#2563a8;border-color:#2563a8}
-.suivi-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:4px}
+.suivi-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:4px;position:sticky;bottom:0;background:white;padding-bottom:10px;border-top:1px solid var(--sqh-gray2);margin-top:8px;z-index:5}
 .suivi-saved{font-size:11px;font-weight:600;color:var(--sqh-green);opacity:0;transition:opacity .3s}
 .suivi-saved.show{opacity:1}
 .suivi-badge{
@@ -715,7 +715,8 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
   font-family:var(--font);font-size:9px;font-weight:600;
   color:var(--sqh-gray4);transition:color .15s;padding:4px 0;
 }
-.bottom-nav-btn .bn-icon{font-size:18px;line-height:1}
+.bottom-nav-btn .bn-icon{font-size:20px;line-height:1}
+.bottom-nav-btn .bn-label{font-size:9px;font-weight:600;line-height:1;display:flex;align-items:center;gap:2px}
 .bottom-nav-btn.active{color:var(--sqh-green)}
 /* Floating action button map -> list */
 .fab-list{
@@ -729,7 +730,7 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 
 @media (max-width: 768px) {
 
-  /* ══ TOPBAR — compact, pas de débordement ═══════════════════════ */
+  /* ══ TOPBAR — compact ════════════════════════════════════════════ */
   .topbar{padding:0 8px;gap:4px;height:52px;overflow:hidden}
   .hamburger-btn{display:flex;flex-shrink:0}
   .topbar-logo-img{height:26px}
@@ -737,7 +738,6 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
   .topbar-spacer{flex:1;min-width:0}
   #topbar-status,#topbar-user{display:none}
   .cloud-saved-badge{display:none !important}
-  /* Bouton itinéraire déplacé dans la bottom nav */
   .btn-itin-top{display:none !important}
   .btn-sessions-top{padding:5px 7px;font-size:10px}
   .btn-sessions-top span{display:none}
@@ -745,18 +745,18 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
   .btn-profile-top .profile-label{display:none}
   .btn-logout-top{padding:5px 7px;font-size:10px}
 
-  /* ══ LAYOUT : colonne carte + fiche sous la topbar ══════════════ */
+  /* ══ LAYOUT ══════════════════════════════════════════════════════ */
   .body{
     flex-direction:column;
-    height:calc(100vh - 52px - 56px); /* topbar 52px + bottom nav 56px */
+    height:calc(100vh - 52px - 58px);
     overflow:hidden;
     position:relative;
   }
 
-  /* ══ SIDEBAR = plein écran glissant par-dessus tout ════════════ */
+  /* ══ SIDEBAR = plein écran glissant ════════════════════════════ */
   .sidebar{
     position:fixed;
-    top:52px;left:0;right:0;bottom:56px;
+    top:52px;left:0;right:0;bottom:58px;
     z-index:300;
     width:100% !important;
     transform:translateX(-100%);
@@ -768,94 +768,120 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
   .sidebar.open{transform:translateX(0)}
   .sidebar-backdrop{display:none !important}
 
-  /* ══ CONTENT — colonne verticale fixe ══════════════════════════ */
+  /* ══ CONTENT — colonne verticale ════════════════════════════════ */
   .content{
-    width:100%;
-    height:100%;
-    display:flex;
-    flex-direction:column;
-    overflow:hidden;
-    position:relative;
+    width:100%;height:100%;
+    display:flex;flex-direction:column;
+    overflow:hidden;position:relative;
   }
 
-  /* ══ CARTE — 42% de la zone body, zoom isolé ═══════════════════
-     touch-action:none : le pinch-to-zoom reste dans Leaflet          */
+  /* ══ CARTE — mode split (42%) ════════════════════════════════════
+     Vue "full" : carte masquée, panneau plein écran              */
   #map{
-    height:42%;
-    min-height:180px;
-    max-height:42%;
-    flex-shrink:0;
-    width:100%;
-    z-index:1;
+    height:42%;min-height:180px;max-height:42%;
+    flex-shrink:0;width:100%;z-index:1;
+    /* iOS : Leaflet gère le touch en interne via son propre handler */
+    -webkit-user-select:none;
   }
+  /* En vue plein écran on masque la carte */
+  .content[data-mobile-view="full"] #map{display:none !important}
+  .content[data-mobile-view="full"] .detail-panel{
+    height:100% !important;
+    max-height:100% !important;
+    flex:1;
+  }
+  /* En vue split on montre la carte */
+  .content[data-mobile-view="split"] #map{display:block !important}
+
+  /* iOS Safari : touch-action none uniquement sur le conteneur Leaflet */
   .leaflet-container{touch-action:none !important}
 
-  /* ══ RESIZE HANDLE masqué ══════════════════════════════════════ */
+  /* ══ RESIZE HANDLE masqué ════════════════════════════════════════ */
   .resize-handle{display:none !important}
 
-  /* ══ PANNEAU DÉTAIL — 58% restant, toujours visible ═══════════ */
+  /* ══ PANNEAU DÉTAIL ══════════════════════════════════════════════ */
   .detail-panel{
-    flex:1;
-    min-height:0;
+    flex:1;min-height:0;
     position:relative;
     transform:none !important;
     border-radius:0;
     border-top:3px solid var(--sqh-green);
     box-shadow:none;
-    display:flex;
-    flex-direction:column;
-    overflow:hidden;
-    z-index:2;
+    display:flex;flex-direction:column;
+    overflow:hidden;z-index:2;
   }
   .detail-panel::before{display:none}
   .detail-panel.mobile-open{transform:none !important}
 
-  /* Onglets TOUJOURS visibles, scrollables horizontalement */
+  /* ══ EN-TÊTE STICKY bien actif ═══════════════════════════════════ */
+  .mobile-detail-header{
+    display:flex;align-items:center;gap:8px;
+    padding:8px 12px 6px;
+    background:var(--sqh-green);
+    color:white;font-size:11px;font-weight:700;
+    flex-shrink:0;min-height:36px;
+    border-bottom:1px solid rgba(255,255,255,.2);
+  }
+  .mobile-detail-header .mh-back{
+    background:none;border:none;color:white;
+    font-size:16px;padding:0 6px 0 0;cursor:pointer;
+    flex-shrink:0;line-height:1;
+  }
+  .mobile-detail-header .mh-addr{
+    flex:1;min-width:0;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap;
+  }
+  .mobile-detail-header .mh-dpe{
+    font-size:14px;flex-shrink:0;
+  }
+
+  /* ══ ONGLETS — touch target 48px ════════════════════════════════ */
   .detail-tabs{
-    display:flex !important;
-    flex-shrink:0;
-    overflow-x:auto;
-    -webkit-overflow-scrolling:touch;
+    display:flex !important;flex-shrink:0;
+    overflow-x:auto;-webkit-overflow-scrolling:touch;
     scrollbar-width:none;
     border-bottom:1px solid var(--sqh-gray2);
     background:var(--sqh-gray1);
   }
   .detail-tabs::-webkit-scrollbar{display:none}
-  .detail-tab{padding:9px 13px;font-size:11px;font-weight:600;white-space:nowrap;flex-shrink:0}
+  .detail-tab{
+    padding:0 14px;
+    font-size:11px;font-weight:600;
+    white-space:nowrap;flex-shrink:0;
+    min-height:48px;   /* Apple HIG minimum touch target */
+    display:flex;align-items:center;gap:4px;
+  }
 
-  /* Corps du panneau scrollable indépendamment de la carte */
+  /* ══ CORPS scrollable ════════════════════════════════════════════ */
   .detail-body{
     flex:1;
     overflow-y:auto;
     -webkit-overflow-scrolling:touch;
     overscroll-behavior:contain;
-    padding:12px 14px 20px;
+    padding:12px 14px 24px;
   }
 
-  /* ══ BOTTOM NAV avec bouton Itinéraire ══════════════════════════ */
-  .bottom-nav{display:flex !important;z-index:400}
-  #bn-itin{display:flex}
+  /* ══ BOTTOM NAV — 5 boutons ═════════════════════════════════════ */
+  .bottom-nav{display:flex !important;z-index:400;height:58px}
+  #bn-itin{display:none} /* affiché dynamiquement si biens localisés */
   .fab-list{display:none !important}
 
-  /* ══ Cards tactiles ════════════════════════════════════════════ */
+  /* ══ Cards tactiles ══════════════════════════════════════════════ */
   .bien-card{min-height:54px;padding:11px 12px}
   .bien-card .bc-addr{font-size:12px}
-  .suivi-statut-chip{padding:7px 14px;font-size:12px;min-height:36px}
+  .suivi-statut-chip{padding:7px 14px;font-size:12px;min-height:44px}
 
-  /* ══ Modals en bottom sheet ════════════════════════════════════ */
+  /* ══ Modals en bottom sheet ═════════════════════════════════════ */
   .sessions-overlay,.profile-overlay,.ademe-overlay{align-items:flex-end}
   .sessions-modal,.profile-modal{
     width:100%;max-width:100%;
     border-radius:16px 16px 0 0;
-    max-height:88vh;
-    position:relative;
+    max-height:88vh;position:relative;
   }
   .ademe-modal{
     width:100%;max-width:100%;
     border-radius:16px 16px 0 0;
-    max-height:92vh;
-    position:relative;
-    overflow-y:auto;
+    max-height:92vh;position:relative;overflow-y:auto;
   }
   .login-card{margin:16px;padding:28px 20px}
 }
@@ -863,10 +889,11 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 /* iPhone SE / très petits écrans */
 @media (max-width: 390px) {
   #map{height:36%;min-height:150px;max-height:36%}
-  .detail-tab{padding:8px 10px;font-size:10px}
+  .detail-tab{padding:0 10px;font-size:10px;min-height:44px}
   .topbar{height:48px}
-  .body{height:calc(100vh - 48px - 56px)}
+  .body{height:calc(100vh - 48px - 58px)}
   .sidebar{top:48px}
+  .bottom-nav{height:58px}
 }
 
 @media (min-width:769px) and (max-width:1024px){
@@ -998,6 +1025,12 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 
       <!-- DETAIL PANEL -->
       <div class="detail-panel" id="detail-panel">
+        <!-- En-tête sticky mobile (adresse + badge DPE) -->
+        <div class="mobile-detail-header" id="mobile-detail-header" style="display:none">
+          <button class="mh-back" onclick="mobileSwitchView('map')" title="Retour carte">‹ Carte</button>
+          <span class="mh-addr" id="mh-addr-text">Sélectionnez un bien</span>
+          <span class="mh-dpe" id="mh-dpe-badge"></span>
+        </div>
         <div class="detail-tabs" id="detail-tabs" style="display:none">
           <div class="detail-tab" id="tab-letter" onclick="switchTab('letter',this)">✉️ Courrier</div>
           <div class="detail-tab" id="tab-prospection" onclick="switchTab('prospection',this)">📞 Prospection<span class="suivi-badge" id="suivi-badge-dot"></span></div>
@@ -1665,6 +1698,15 @@ function switchTab(tab, el) {
   document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   renderDetail();
+  // Rafraîchit l'en-tête mobile si on est en plein écran
+  if (window.innerWidth <= 768) {
+    const content = document.querySelector('.content');
+    const header  = document.getElementById('mobile-detail-header');
+    if (content?.getAttribute('data-mobile-view') === 'full' && header) {
+      header.style.display = 'flex';
+      _showMobileHeader();
+    }
+  }
 }
 function switchToReno() {
   activeTab = 'reno';
@@ -4402,23 +4444,23 @@ function showSessionToast(msg) {
   </div>
 </div>
 
-<!-- BOTTOM NAV (mobile) -->
+<!-- BOTTOM NAV (mobile) — ordre terrain : Liste › Itin. › Prospection › Fiche › Carte -->
 <nav class="bottom-nav" id="bottom-nav">
   <div class="bottom-nav-inner">
     <button class="bottom-nav-btn" id="bn-list" onclick="mobileSwitchView('list')">
-      <span class="bn-icon">🏠</span>Liste
-    </button>
-    <button class="bottom-nav-btn active" id="bn-map" onclick="mobileSwitchView('map')">
-      <span class="bn-icon">🗺️</span>Carte
-    </button>
-    <button class="bottom-nav-btn" id="bn-detail" onclick="mobileSwitchView('detail')">
-      <span class="bn-icon">📋</span>Fiche
-    </button>
-    <button class="bottom-nav-btn" id="bn-letter" onclick="mobileSwitchView('letter')">
-      <span class="bn-icon">✉️</span>Courrier
+      <span class="bn-icon">📋</span><span class="bn-label">Liste</span>
     </button>
     <button class="bottom-nav-btn" id="bn-itin" onclick="showItinerary()" style="display:none">
-      <span class="bn-icon">📍</span>Itin.
+      <span class="bn-icon">📍</span><span class="bn-label">Itin.</span>
+    </button>
+    <button class="bottom-nav-btn" id="bn-prospection" onclick="mobileSwitchView('prospection')">
+      <span class="bn-icon">📞</span><span class="bn-label">Suivi<span class="suivi-badge" id="bn-suivi-badge" style="display:none;width:6px;height:6px;border-radius:50%;background:var(--sqh-red);display:inline-block;margin-left:3px;vertical-align:middle"></span></span>
+    </button>
+    <button class="bottom-nav-btn" id="bn-detail" onclick="mobileSwitchView('detail')">
+      <span class="bn-icon">🏠</span><span class="bn-label">Fiche</span>
+    </button>
+    <button class="bottom-nav-btn active" id="bn-map" onclick="mobileSwitchView('map')">
+      <span class="bn-icon">🗺️</span><span class="bn-label">Carte</span>
     </button>
   </div>
 </nav>
@@ -4814,55 +4856,89 @@ function mobileSwitchView(view) {
   if (window.innerWidth > 768) return;
   _mobileCurrentView = view;
 
-  const sidebar = document.getElementById('sidebar');
+  const content = document.querySelector('.content');
+  const sidebar  = document.getElementById('sidebar');
+  const header   = document.getElementById('mobile-detail-header');
 
-  // Mise à jour des boutons actifs
-  ['bn-list','bn-map','bn-detail','bn-letter'].forEach(id => {
+  // Réinitialise tous les boutons actifs
+  ['bn-list','bn-map','bn-detail','bn-prospection'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
 
   if (view === 'list') {
-    // Ouvre la sidebar plein écran
     if (sidebar) sidebar.classList.add('open');
+    if (content) content.removeAttribute('data-mobile-view');
+    if (header) header.style.display = 'none';
     document.getElementById('bn-list')?.classList.add('active');
 
   } else if (view === 'map') {
-    // Ferme la sidebar, reste sur la carte
     if (sidebar) sidebar.classList.remove('open');
+    if (content) content.setAttribute('data-mobile-view', 'split');
+    if (header) header.style.display = 'none';
     document.getElementById('bn-map')?.classList.add('active');
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 300);
 
   } else if (view === 'detail') {
     if (sidebar) sidebar.classList.remove('open');
+    if (content) content.setAttribute('data-mobile-view', 'full');
+    _showMobileHeader();
+    if (header) header.style.display = 'flex';
     document.getElementById('bn-detail')?.classList.add('active');
-    // Bascule sur l'onglet Bien si besoin
     if (activeId !== null) {
-      try { switchTab('bien', document.getElementById('tab-bien')); } catch(e){}
+      try { switchTab('bien', document.getElementById('tab-bien')); } catch(e) {}
+    }
+
+  } else if (view === 'prospection') {
+    // Vue plein écran Prospection — priorité terrain
+    if (sidebar) sidebar.classList.remove('open');
+    if (content) content.setAttribute('data-mobile-view', 'full');
+    _showMobileHeader();
+    if (header) header.style.display = 'flex';
+    document.getElementById('bn-prospection')?.classList.add('active');
+    if (activeId !== null) {
+      try { switchTab('prospection', document.getElementById('tab-prospection')); } catch(e) {}
     }
 
   } else if (view === 'letter') {
     if (sidebar) sidebar.classList.remove('open');
-    document.getElementById('bn-letter')?.classList.add('active');
+    if (content) content.setAttribute('data-mobile-view', 'full');
+    _showMobileHeader();
+    if (header) header.style.display = 'flex';
     if (activeId !== null) {
-      try { switchTab('letter', document.getElementById('tab-letter')); } catch(e){}
+      try { switchTab('letter', document.getElementById('tab-letter')); } catch(e) {}
     }
   }
 }
 
-// Quand on sélectionne un bien sur mobile → ferme la sidebar, onglet Fiche actif
+// Mise à jour de l'en-tête sticky mobile (adresse + badge DPE)
+function _showMobileHeader() {
+  if (window.innerWidth > 768 || activeId === null) return;
+  const b = biens[activeId];
+  if (!b) return;
+  const addrEl = document.getElementById('mh-addr-text');
+  const dpeEl  = document.getElementById('mh-dpe-badge');
+  if (addrEl) addrEl.textContent = (b.adresse || 'Adresse inconnue') + (b.ville ? ', ' + b.ville : '');
+  if (dpeEl)  dpeEl.textContent  = b.dpe ? b.dpe : '';
+}
+
+// Quand on sélectionne un bien sur mobile → vue split (carte + panneau)
 function mobileOnBienSelect() {
   if (window.innerWidth > 768) return;
   const sidebar = document.getElementById('sidebar');
+  const content = document.querySelector('.content');
+  const header  = document.getElementById('mobile-detail-header');
   if (sidebar) sidebar.classList.remove('open');
+  if (content) content.setAttribute('data-mobile-view', 'split');
+  if (header) header.style.display = 'none';
   _mobileCurrentView = 'detail';
-  ['bn-list','bn-map','bn-detail','bn-letter'].forEach(id => {
+  ['bn-list','bn-map','bn-detail','bn-prospection'].forEach(id => {
     document.getElementById(id)?.classList.remove('active');
   });
   document.getElementById('bn-detail')?.classList.add('active');
   if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 250);
 }
 
-// Affiche le bouton Itinéraire dans la bottom nav quand disponible
+// Affiche le bouton Itinéraire dans la bottom nav quand des biens sont localisés
 function mobileUpdateItinBtn() {
   if (window.innerWidth > 768) return;
   const hasLocalized = biens.some(b => b.geoStatus === 'ok');
