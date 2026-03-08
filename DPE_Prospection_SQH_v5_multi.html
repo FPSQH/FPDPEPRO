@@ -4996,10 +4996,12 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
 
-  // Détecte si on arrive depuis un lien de réinitialisation de mot de passe
+  // Détecte le type de lien Supabase dans le hash
   const hash = window.location.hash;
   if (hash.includes('type=recovery') || hash.includes('type=email_change')) {
     showNewPasswordForm();
+  } else if (hash.includes('type=invite') || hash.includes('type=signup')) {
+    showInvitePasswordForm();
   } else {
     initAuth();
   }
@@ -5008,6 +5010,44 @@ window.addEventListener('DOMContentLoaded', () => {
     if (leafletMap) leafletMap.invalidateSize();
   });
 });
+
+// ── Formulaire création mot de passe (invitation) ────────────────
+function showInvitePasswordForm() {
+  const card = document.querySelector('.login-card');
+  card.innerHTML = `
+    <div class="login-logo">
+      <svg height="38" viewBox="0 0 220 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="38" height="38" rx="8" fill="#038B92"/>
+        <path d="M10 19C10 14 14 10 19 10C22 10 24.5 11.5 26 14L22 16C21.2 14.8 20.2 14 19 14C16.2 14 14 16.2 14 19C14 21.8 16.2 24 19 24C20.2 24 21.2 23.2 22 22L26 24C24.5 26.5 22 28 19 28C14 28 10 24 10 19Z" fill="white"/>
+        <text x="48" y="26" font-family="'Source Sans 3',sans-serif" font-size="18" font-weight="700" fill="#038B92">Square Habitat</text>
+      </svg>
+    </div>
+    <div class="login-title">
+      <h2>Bienvenue !</h2>
+      <p>Créez votre mot de passe pour accéder à l'application</p>
+    </div>
+    <div id="newpwd-err" class="login-err"></div>
+    <div id="newpwd-info" class="login-info"></div>
+    <div class="login-fields">
+      <div class="login-field">
+        <label>Choisissez un mot de passe</label>
+        <input type="password" id="newpwd-1" placeholder="8 caractères minimum" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')document.getElementById('newpwd-2').focus()"/>
+      </div>
+      <div class="login-field">
+        <label>Confirmer le mot de passe</label>
+        <input type="password" id="newpwd-2" placeholder="Répétez le mot de passe" autocomplete="new-password"
+          onkeydown="if(event.key==='Enter')submitNewPassword()"/>
+      </div>
+    </div>
+    <button class="login-btn" id="newpwd-btn" onclick="submitNewPassword()">✓ Créer mon mot de passe</button>
+    <p style="font-size:11px;color:var(--sqh-gray4);text-align:center;margin-top:12px">
+      Vous pourrez vous connecter avec votre email et ce mot de passe à chaque visite.
+    </p>
+  `;
+  // Laisse Supabase établir la session depuis le token d'invitation
+  _supa.auth.getSession();
+}
 
 // ── Formulaire nouveau mot de passe ──────────────────────────────
 function showNewPasswordForm() {
