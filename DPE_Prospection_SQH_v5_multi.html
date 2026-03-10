@@ -2071,17 +2071,22 @@ function generateLetter(b) {
   /* ── Encart Audit compact ── */
   let auditBlock = '';
   if (b.audit && b.audit.nAudit) {
-    const scLines = (b.audit.scenarios || []).slice(0, 3).map(sc =>
-      `<div class="ltr-sc-line">→ <strong>${sc.classeApres||'?'}</strong> · ~${Number(sc.cout||0).toLocaleString('fr-FR')} € · gain <strong>${sc.gainPct||sc.gainMin||'?'}%</strong></div>`
-    ).join('');
-    const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
-    auditBlock = `
-    <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
-    <p class="ltr-p">Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :</p>
-    <div class="ltr-infobox ltr-infobox--green">
-      ${scLines}
-      <div style="margin-top:4pt">En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation. 🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a></div>
-    </div>`;
+    const validSc = (b.audit.scenarios || [])
+      .filter(sc => sc.classeApres && sc.classeApres !== b.dpe && sc.cout > 0 && (sc.gainPct||sc.gainMin||0) > 0)
+      .slice(0, 3);
+    if (validSc.length) {
+      const scLines = validSc.map(sc =>
+        `<div class="ltr-sc-line">→ <strong>${sc.categorie}</strong> · DPE <strong>${sc.classeApres}</strong> · ~${Number(sc.cout||0).toLocaleString('fr-FR')} € · gain <strong>${sc.gainPct||sc.gainMin}%</strong></div>`
+      ).join('');
+      const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
+      auditBlock = `
+      <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
+      <p class="ltr-p">Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :</p>
+      <div class="ltr-infobox ltr-infobox--green">
+        ${scLines}
+        <div style="margin-top:4pt">En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation. 🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a></div>
+      </div>`;
+    }
   }
 
   /* ── Paragraphe vente enrichi ── */
@@ -2536,31 +2541,38 @@ function letterToDocxParagraphs(b) {
 
   // ── Section Audit ────────────────────────────────────────────────────────────
   if (b.audit && b.audit.nAudit) {
-    paras.push(sectionTitle('Audit énergétique & rénovation'));
-    const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
-    paras.push(bodyPara(`Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :`));
-    (b.audit.scenarios || []).slice(0, 3).forEach(sc => {
-      const cout = Number(sc.cout||0).toLocaleString('fr-FR');
-      const gain = sc.gainPct || sc.gainMin || '?';
-      paras.push(new Paragraph({
-        children: [
-          new TextRun({ text: '→ ', font: 'Arial', size: 20, color: GREEN, bold: true }),
-          new TextRun({ text: 'DPE ', font: 'Arial', size: 20, color: DARK }),
-          new TextRun({ text: `${sc.classeApres||'?'}`, font: 'Arial', size: 20, color: DARK, bold: true }),
-          new TextRun({ text: ` · ~${cout} €`, font: 'Arial', size: 20, color: DARK }),
-          new TextRun({ text: ' · gain ', font: 'Arial', size: 20, color: DARK }),
-          new TextRun({ text: `${gain}%`, font: 'Arial', size: 20, color: DARK, bold: true }),
-        ],
-        shading: { type: ShadingType.CLEAR, fill: 'EBF5EC' },
-        border: { left: { style: BorderStyle.THICK, size: 20, color: GREEN, space: 8 } },
-        indent: { left: 160 },
-        spacing: { after: 40 },
-      }));
-    });
-    paras.push(...infoBox([
-      `En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation.`,
-      `🔗 j-ecorenove.credit-agricole.fr`,
-    ], 'green'));
+    const validSc = (b.audit.scenarios || [])
+      .filter(sc => sc.classeApres && sc.classeApres !== b.dpe && sc.cout > 0 && (sc.gainPct||sc.gainMin||0) > 0)
+      .slice(0, 3);
+    if (validSc.length) {
+      paras.push(sectionTitle('Audit énergétique & rénovation'));
+      const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
+      paras.push(bodyPara(`Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :`));
+      validSc.forEach(sc => {
+        const cout = Number(sc.cout||0).toLocaleString('fr-FR');
+        const gain = sc.gainPct || sc.gainMin || '?';
+        const cat  = sc.categorie || 'Scénario';
+        paras.push(new Paragraph({
+          children: [
+            new TextRun({ text: '→ ', font: 'Arial', size: 20, color: GREEN, bold: true }),
+            new TextRun({ text: cat, font: 'Arial', size: 20, color: DARK, bold: true }),
+            new TextRun({ text: ' · DPE ', font: 'Arial', size: 20, color: DARK }),
+            new TextRun({ text: `${sc.classeApres}`, font: 'Arial', size: 20, color: DARK, bold: true }),
+            new TextRun({ text: ` · ~${cout} €`, font: 'Arial', size: 20, color: DARK }),
+            new TextRun({ text: ' · gain ', font: 'Arial', size: 20, color: DARK }),
+            new TextRun({ text: `${gain}%`, font: 'Arial', size: 20, color: DARK, bold: true }),
+          ],
+          shading: { type: ShadingType.CLEAR, fill: 'EBF5EC' },
+          border: { left: { style: BorderStyle.THICK, size: 20, color: GREEN, space: 8 } },
+          indent: { left: 160 },
+          spacing: { after: 40 },
+        }));
+      });
+      paras.push(...infoBox([
+        `En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation.`,
+        `🔗 j-ecorenove.credit-agricole.fr`,
+      ], 'green'));
+    }
   }
 
   // ── Section Estimation ───────────────────────────────────────────────────────
@@ -3649,22 +3661,46 @@ function buildAuditIndex(records) {
 
 function buildAuditMeta(lines) {
   const ref = lines[0];
-  const ORDER = { 'Minimal':1, 'Interm\u00e9diaire':2, 'BBC compatible':3 };
+  const ORDER = { 'Minimal':1, 'Interm\u00e9diaire':2, 'BBC compatible':3, 'Multi-\u00e9tapes':4, 'En une \u00e9tape':5 };
+
+  // Remapping des libellés bruts ADEME vers des noms lisibles
+  function remapCat(raw) {
+    if (!raw) return 'Travaux';
+    const low = raw.toLowerCase();
+    if (low.includes('minimal'))       return 'Minimal';
+    if (low.includes('interm'))        return 'Interm\u00e9diaire';
+    if (low.includes('bbc'))           return 'BBC compatible';
+    if (low.includes('multi'))         return 'Multi-\u00e9tapes';
+    if (low.includes('une \u00e9tape') || low.includes('une etape')) return 'En une \u00e9tape';
+    return raw; // fallback : valeur brute
+  }
+
   const catMap = {};
   lines.forEach(r => {
-    const cat = r.categorie_scenario || 'Travaux';
+    const rawCat = r.categorie_scenario || '';
+    // Exclure l'état initial et les lignes sans coût réel
+    if (!rawCat || rawCat.toLowerCase().includes('\u00e9tat initial') || rawCat.toLowerCase().includes('etat initial')) return;
+    const cout = r.couts_cumules_travaux != null ? Math.round(r.couts_cumules_travaux) : 0;
+    if (cout <= 0) return;
+    const cat = remapCat(rawCat);
     if (!catMap[cat] || r.etape_travaux > (catMap[cat].etape_travaux||0)) catMap[cat] = r;
   });
+
   const scenarios = Object.values(catMap)
-    .sort((a,b) => (ORDER[a.categorie_scenario]||9)-(ORDER[b.categorie_scenario]||9))
+    .sort((a,b) => {
+      const ka = remapCat(a.categorie_scenario||'');
+      const kb = remapCat(b.categorie_scenario||'');
+      return (ORDER[ka]||9) - (ORDER[kb]||9);
+    })
+    .slice(0, 3)
     .map(r => ({
-      categorie:   r.categorie_scenario || 'Travaux',
+      categorie:   remapCat(r.categorie_scenario || 'Travaux'),
       classeApres: (r.classe_bilan_dpe||'?').charAt(0).toUpperCase(),
       cout:        r.couts_cumules_travaux != null ? Math.round(r.couts_cumules_travaux) : null,
-      gainMax:     r.gains_cumules_facture_max != null ? Math.round(r.gains_cumules_facture_max) : null,
-      gainMin:     r.gains_cumules_facture_min != null ? Math.round(r.gains_cumules_facture_min) : null,
+      gainMax:     r.gains_cumules_facture_max != null ? Math.round(Math.abs(r.gains_cumules_facture_max)) : null,
+      gainMin:     r.gains_cumules_facture_min != null ? Math.round(Math.abs(r.gains_cumules_facture_min)) : null,
       gainPct:     r.gains_relatifs_cumules_conso_5_usages_m2_ep != null
-                   ? Math.round(r.gains_relatifs_cumules_conso_5_usages_m2_ep*100) : null,
+                   ? Math.round(Math.abs(r.gains_relatifs_cumules_conso_5_usages_m2_ep)*100) : null,
     }));
   return {
     nAudit:          ref.n_audit || '\u2014',
