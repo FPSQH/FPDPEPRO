@@ -3544,7 +3544,7 @@ async function fetchFromADEME() {
         dateField: 'date_etablissement_audit',
         dateStart: '2023-04-01', dateEnd: new Date().toISOString().slice(0,10),
         dpeFilter: [], dpeFieldName: null,
-        filterMode: 'direct',
+        filterMode: 'qs_only',
         selectFields: [
           'n_audit','numero_dpe','date_etablissement_audit','date_fin_validite_audit',
           'adresse_ban','code_postal_ban','nom_commune_ban','code_postal_brut',
@@ -3608,8 +3608,10 @@ function toIsoDate(val) {
 async function fetchAllPages(baseUrl, cps, opts, signal) {
   const { dateField, dateStart, dateEnd, dpeFilter, dpeFieldName,
           typeFilter, selectFields, onProgress, sortField, filterMode } = opts;
-  // filterMode: 'qs' (défaut, Lucene — DPE dataset) ou 'direct' (filtre exact — audit dataset)
-  const useDirectFilter = filterMode === 'direct';
+  // filterMode:
+  //   'qs'      (défaut) — Lucene qs_fields + qs  → DPE dataset (code_postal_ban indexé texte)
+  //   'direct'           — filtre exact champ      → si le champ est indexé exact
+  //   'qs_only'          — qs sans qs_fields       → audit dataset (aucune indexation spécifique)
   let all = [];
 
   const dsMin = dateStart ? dateStart.slice(0, 10) : null;
@@ -3621,11 +3623,14 @@ async function fetchAllPages(baseUrl, cps, opts, signal) {
     if (onProgress) onProgress(ci, cps.length, all.length);
 
     const paramObj = { size: 500, select: selectFields.join(',') };
-    if (useDirectFilter) {
-      // Filtre direct Data Fair : code_postal_ban=XXXXX (pas de Lucene)
+    if (filterMode === 'direct') {
       paramObj['code_postal_ban'] = cp;
+    } else if (filterMode === 'qs_only') {
+      // Recherche plein-texte globale : le CP sera trouvé dans code_postal_ban
+      // sans requérir une indexation spécifique du champ
+      paramObj['qs'] = cp;
     } else {
-      // Recherche Lucene sur code_postal_ban (DPE dataset)
+      // 'qs' (défaut) : Lucene ciblé sur code_postal_ban
       paramObj['qs_fields'] = 'code_postal_ban';
       paramObj['qs'] = '"' + cp + '"';
     }
