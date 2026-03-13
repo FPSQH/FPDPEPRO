@@ -157,6 +157,32 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
   padding:8px 14px;border-bottom:1px solid var(--sqh-gray2);
   flex-shrink:0;display:none;flex-direction:column;gap:6px
 }
+.filter-selects{display:flex;gap:6px;flex-wrap:wrap;padding:4px 0 2px}
+.filter-select-wrap{display:flex;flex-direction:column;gap:2px;flex:1;min-width:120px}
+.filter-select-wrap label{font-size:10px;font-weight:700;color:var(--sqh-gray4);text-transform:uppercase;letter-spacing:.4px}
+.filter-select-wrap select{
+  font-size:12px;padding:4px 8px;border:1.5px solid var(--sqh-gray3);border-radius:6px;
+  background:white;color:var(--sqh-gray5);outline:none;width:100%;
+}
+.filter-select-wrap select:focus{border-color:var(--sqh-green)}
+.flt-ville-btn{
+  font-size:12px;padding:4px 8px;border:1.5px solid var(--sqh-gray3);border-radius:6px;
+  background:white;color:var(--sqh-gray5);cursor:pointer;width:100%;text-align:left;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.flt-ville-btn:hover,.flt-ville-btn.open{border-color:var(--sqh-green)}
+.flt-ville-dropdown{
+  position:absolute;z-index:999;background:white;border:1.5px solid var(--sqh-green);
+  border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12);
+  max-height:180px;overflow-y:auto;min-width:160px;display:none;top:100%;left:0;margin-top:2px;
+}
+.flt-ville-dropdown.open{display:block}
+.flt-ville-item{
+  display:flex;align-items:center;gap:7px;padding:5px 10px;font-size:12px;cursor:pointer;
+}
+.flt-ville-item:hover{background:var(--sqh-gray1)}
+.flt-ville-item input[type=checkbox]{accent-color:var(--sqh-green);cursor:pointer}
+.flt-ville-wrap-inner{position:relative}
 .filter-bar.visible{display:flex}
 .filter-row{display:flex;gap:6px;align-items:flex-start;flex-wrap:wrap}
 .filter-row label{font-size:11px;color:var(--sqh-gray4);min-width:55px;font-weight:600;padding-top:3px}
@@ -1001,6 +1027,24 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
       <!-- Filter bar -->
       <div class="filter-bar" id="filter-bar">
         <div class="sb-label">Filtres — cocher les résultats</div>
+        <div class="filter-selects">
+          <div class="filter-select-wrap" id="flt-type-wrap" style="display:none">
+            <label>Type de bien</label>
+            <select id="flt-type" onchange="applySelectFilters()">
+              <option value="">— Tous —</option>
+            </select>
+          </div>
+          <div class="filter-select-wrap" id="flt-ville-wrap" style="display:none">
+            <label>Ville</label>
+            <div class="flt-ville-wrap-inner">
+              <button type="button" class="flt-ville-btn" id="flt-ville-btn" onclick="toggleVilleDropdown(event)">
+                <span id="flt-ville-label">— Toutes —</span>
+                <span style="font-size:9px;opacity:.5">▼</span>
+              </button>
+              <div class="flt-ville-dropdown" id="flt-ville-dropdown"></div>
+            </div>
+          </div>
+        </div>
         <div class="filter-row" id="filter-rows"></div>
         <div class="filter-actions">
           <button class="btn btn-ghost btn-sm" onclick="resetFilters()">✕ Réinitialiser</button>
@@ -1254,15 +1298,40 @@ let activeFilters = {dpe: new Set(), type: new Set(), ville: new Set()};
 function buildFilters() {
   const container = document.getElementById('filter-rows');
   container.innerHTML = '';
-  // Reset Sets but keep existing selections if values still valid
   if (!activeFilters.dpe)   activeFilters.dpe   = new Set();
   if (!activeFilters.type)  activeFilters.type  = new Set();
   if (!activeFilters.ville) activeFilters.ville = new Set();
   if (!activeFilters.audit) activeFilters.audit = new Set();
+
+  // ── Selects type et ville ────────────────────────────────────────────
+  const typeVals = [...columnMeta.type||[]].sort();
+  const fltTypeWrap = document.getElementById('flt-type-wrap');
+  const fltType     = document.getElementById('flt-type');
+  if (fltTypeWrap && fltType && typeVals.length > 0) {
+    const prev = fltType.value;
+    fltType.innerHTML = '<option value="">— Tous —</option>' +
+      typeVals.map(v => `<option value="${v}"${v===prev?' selected':''}>${v}</option>`).join('');
+    fltTypeWrap.style.display = '';
+  } else if (fltTypeWrap) { fltTypeWrap.style.display = 'none'; }
+
+  // ── Dropdown villes ─────────────────────────────────────────────────
+  const villeWrap = document.getElementById('flt-ville-wrap');
+  const villeDrop = document.getElementById('flt-ville-dropdown');
+  const villeVals = [...columnMeta.ville||[]].sort();
+  if (villeWrap && villeDrop) {
+    if (villeVals.length > 0) {
+      villeDrop.innerHTML = villeVals.map(v =>
+        `<label class="flt-ville-item"><input type="checkbox" value="${v}" onchange="onVilleCheck()">${v}</label>`
+      ).join('');
+      villeWrap.style.display = '';
+    } else {
+      villeWrap.style.display = 'none';
+    }
+  }
+
+  // ── Chips DPE et Audit ────────────────────────────────────────────────
   const cols = [
     { key:'dpe',   label:'DPE',   values:[...columnMeta.dpe||[]].sort() },
-    { key:'type',  label:'Type',  values:[...columnMeta.type||[]].sort() },
-    { key:'ville', label:'Ville', values:[...columnMeta.ville||[]].sort() },
     { key:'audit', label:'Audit', values:['Avec audit','Sans audit'] },
   ];
   cols.forEach(col => {
@@ -1296,31 +1365,70 @@ function toggleFilters() {
   bar.classList.toggle('visible');
 }
 
-function applyFilters() {
+function getSelectedVilles() {
+  const boxes = document.querySelectorAll('#flt-ville-dropdown input[type=checkbox]:checked');
+  return new Set([...boxes].map(b => b.value));
+}
+
+function onVilleCheck() {
+  const sel = getSelectedVilles();
+  const btn = document.getElementById('flt-ville-label');
+  if (btn) btn.textContent = sel.size === 0 ? '— Toutes —' : [...sel].join(', ');
+  applySelectFilters();
+}
+
+function toggleVilleDropdown(e) {
+  e.stopPropagation();
+  const drop = document.getElementById('flt-ville-dropdown');
+  const btn  = document.getElementById('flt-ville-btn');
+  const open = drop.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  if (open) {
+    // Close on outside click
+    const close = ev => { if (!drop.contains(ev.target) && ev.target !== btn) { drop.classList.remove('open'); btn.classList.remove('open'); document.removeEventListener('click', close); } };
+    setTimeout(() => document.addEventListener('click', close), 0);
+  }
+}
+
+// ── Fonction de filtrage unifiée (DPE chips + audit chips + type select + ville checkboxes) ──
+function applyAllFilters(closePanel) {
+  const typeVal        = (document.getElementById('flt-type')?.value || '').toLowerCase().trim();
+  const selectedVilles = getSelectedVilles();
   biens.forEach(b => {
-    const cityLabel = capitalize(b.villeFromAddr);
-    const hasAudit = !!b.audit;
+    // Type de bien (select)
+    const typeMatch  = !typeVal || (b.type||'').toLowerCase() === typeVal;
+    // Ville (checkboxes multi-select)
+    const villeLabel = capitalize(b.villeFromAddr||'');
+    const villeMatch = selectedVilles.size === 0 || selectedVilles.has(villeLabel);
+    // DPE (chips)
+    const dpeMatch   = activeFilters.dpe.size === 0 || activeFilters.dpe.has(b.dpe);
+    // Audit (chips)
+    const hasAudit   = !!b.audit;
     const auditMatch = activeFilters.audit.size === 0 ||
       (activeFilters.audit.has('Avec audit') && hasAudit) ||
       (activeFilters.audit.has('Sans audit') && !hasAudit);
-    const match =
-      (activeFilters.dpe.size   === 0 || activeFilters.dpe.has(b.dpe)) &&
-      (activeFilters.type.size  === 0 || activeFilters.type.has(b.type)) &&
-      (activeFilters.ville.size === 0 || activeFilters.ville.has(cityLabel)) &&
-      auditMatch;
+    const match = typeMatch && villeMatch && dpeMatch && auditMatch;
     b.checked = match;
-    b.visible = true;
+    b.visible  = match;
   });
   renderSidebar();
   updateSelCount();
   updateCheckAllState();
   refreshMarkers();
-  document.getElementById('filter-bar').classList.remove('visible');
+  if (closePanel) document.getElementById('filter-bar').classList.remove('visible');
 }
+// Alias appelés depuis l'UI
+function applyFilters()       { applyAllFilters(true); }
+function applySelectFilters() { applyAllFilters(false); }
 
 function resetFilters() {
   activeFilters = {dpe: new Set(), type: new Set(), ville: new Set()};
-  biens.forEach(b => { b.checked = false; });
+  const fltType = document.getElementById('flt-type');
+  if (fltType) fltType.value = '';
+  document.querySelectorAll('#flt-ville-dropdown input[type=checkbox]').forEach(b => b.checked = false);
+  const lbl = document.getElementById('flt-ville-label');
+  if (lbl) lbl.textContent = '— Toutes —';
+  biens.forEach(b => { b.checked = false; b.visible = true; });
   buildFilters();
   renderSidebar();
   updateSelCount();
@@ -3618,9 +3726,8 @@ async function fetchAllPages(baseUrl, cps, opts, signal) {
       // sans requérir une indexation spécifique du champ
       paramObj['qs'] = cp;
     } else {
-      // 'qs' (défaut) : Lucene ciblé sur code_postal_ban
-      paramObj['qs_fields'] = 'code_postal_ban';
-      paramObj['qs'] = '"' + cp + '"';
+      // Lucene OR sur code_postal_ban (géocodé) et code_postal_brut (brut)
+      paramObj['qs'] = 'code_postal_ban:"' + cp + '" OR code_postal_brut:"' + cp + '"';
     }
     if (sortField) paramObj.sort = '-' + sortField;
     const params = new URLSearchParams(paramObj);
@@ -3633,11 +3740,12 @@ async function fetchAllPages(baseUrl, cps, opts, signal) {
       let data; try { data = await resp.json(); } catch(_) { break; } // réponse tronquée
 
       const rows = (data.results || []).filter(r => {
-        // ── CP ──────────────────────────────────────────────────────────
-        const cpBan  = normCP(r.code_postal_ban);
-        const cpBrut = normCP(r.code_postal_brut);
-        if (cpBan !== cp && cpBrut !== cp) return false;
-
+        // ── CP : filet de sécurité côté client ───────────────────────────
+        if (cp) {
+          const cpBan  = normCP(r.code_postal_ban);
+          const cpBrut = normCP(r.code_postal_brut);
+          if (cpBan !== cp && cpBrut !== cp) return false;
+        }
         // ── Date ─────────────────────────────────────────────────────────
         const d = toIsoDate(r[dateField]);
         if (d && dsMin && d < dsMin) return false;
@@ -3672,23 +3780,25 @@ async function fetchAuditByNumeroDpe(numeroDpeList, signal) {
   const AUDIT_SELECT = [
     'n_audit','numero_dpe','date_etablissement_audit','date_fin_validite_audit',
     'adresse_ban','code_postal_ban','nom_commune_ban','code_postal_brut',
-    'classe_bilan_dpe','surface_habitable_logement',
-    'annee_construction','periode_construction',
+    'classe_bilan_dpe','surface_habitable_logement','annee_construction',
+    // 'periode_construction' — absent du dataset audit-opendata
     'categorie_scenario','etape_travaux',
     'couts_cumules_travaux','gains_cumules_facture_max','gains_cumules_facture_min',
     'gains_relatifs_cumules_conso_5_usages_m2_ep','ep_conso_5_usages_m2'
   ].join(',');
 
-  // Data Fair supporte le filtre exact : numero_dpe=val1,val2,val3 (OR implicite)
-  // On envoie par lots pour rester sous la limite d'URL (~50 numéros par batch)
-  const BATCH = 50;
+  // Data Fair ne supporte pas numero_dpe=val1,val2 — on utilise qs Lucene OR
+  // Lot de 20 max pour rester sous la limite de longueur d'URL
+  const BATCH = 20;
   let all = [];
 
   for (let i = 0; i < numeroDpeList.length; i += BATCH) {
     if (signal && signal.aborted) break;
     const batch = numeroDpeList.slice(i, i + BATCH);
+    // qs Lucene : "num1" OR "num2" OR ... — fonctionne sans indexation de champ
+    const qsVal = batch.map(n => '"' + n + '"').join(' OR ');
     const url = AUDIT_BASE + '?size=500&select=' + encodeURIComponent(AUDIT_SELECT)
-              + '&numero_dpe=' + encodeURIComponent(batch.join(','));
+              + '&qs=' + encodeURIComponent(qsVal);
     try {
       const resp = await fetch(url, { signal });
       if (!resp.ok) {
@@ -3696,7 +3806,9 @@ async function fetchAuditByNumeroDpe(numeroDpeList, signal) {
         continue;
       }
       const data = await resp.json();
-      all = all.concat(data.results || []);
+      // Filtrage côté client : garder seulement les enregistrements dont le numero_dpe est dans le batch
+      const batchSet = new Set(batch);
+      (data.results || []).forEach(r => { if (batchSet.has(r.numero_dpe)) all.push(r); });
     } catch(e) {
       if (e.name !== 'AbortError') console.warn('Audit fetch error:', e);
     }
@@ -3830,6 +3942,14 @@ function loadBiensFromADEME(newBiens, truncated) {
 
   biens = newBiens;
   biens.forEach((b, i) => b.id = i);
+
+  // Reconstruire columnMeta depuis biens (le reset L.3881 l'a vidé)
+  columnMeta = { dpe: new Set(), type: new Set(), ville: new Set() };
+  biens.forEach(b => {
+    if (b.dpe)          columnMeta.dpe.add(b.dpe);
+    if (b.type)         columnMeta.type.add(b.type);
+    if (b.villeFromAddr) columnMeta.ville.add(capitalize(b.villeFromAddr));
+  });
 
   buildFilters();
   renderSidebar();
