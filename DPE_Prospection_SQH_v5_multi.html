@@ -312,19 +312,13 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 .ltr-infobox--teal{background:#E8F6F6;border-color:#009597;color:#0a3d3d}
 .ltr-infobox--green{background:#EBF5EC;border-color:#006A4E;color:#0a2e1d}
 .ltr-infobox strong{font-weight:700}
-.ltr-grid2{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px}
-.ltr-sc-line{font-size:10.5px;padding:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ltr-p{margin-bottom:8px;line-height:1.65}
+.ltr-p{margin-bottom:10px;line-height:1.75}
 .ltr-addr{
   text-align:center;font-weight:700;font-size:13px;
   margin:14px 0;padding:7px 14px;
   border:1px solid var(--sqh-gray3);border-radius:5px;background:#F4F6F5
 }
-.ltr-signature{font-family:Arial,sans-serif;font-size:11px;line-height:1.65;margin-top:14px}
-.ltr-header-preview{display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;margin-bottom:14px;border-bottom:2.5px solid #009597}
-.ltr-header-preview img{height:30px;width:auto}
-.ltr-header-preview-agent{text-align:right;font-family:Arial,sans-serif;font-size:10px;color:#3D5044;line-height:1.5}
-.ltr-header-preview-agent strong{display:block;font-size:11px;color:#1E2A22}
+.ltr-signature{font-family:Arial,sans-serif;font-size:11px;line-height:1.65;margin-top:18px}
 .letter-form-row{display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
 .letter-form-row label{font-size:11px;font-weight:600;color:var(--sqh-gray4);width:90px;flex-shrink:0}
 .letter-form-row input{
@@ -1878,6 +1872,37 @@ function renderBienTab_sync(b) {
         ${b.nom ? `<span class="badge badge-blue">👤 ${b.civilite?b.civilite+' ':''}${b.nom}</span>` : ''}
       </div>
       ${DPE_WARN[b.dpe] ? `<div style="margin-top:8px;font-size:11px;color:var(--sqh-gray4);background:var(--sqh-gray1);padding:6px 10px;border-radius:6px;border-left:3px solid ${DPE_BG[b.dpe]}">${DPE_WARN[b.dpe]}</div>` : ''}
+      ${(() => {
+        if (!b._numeroDpe && !b.audit) return '';
+        const today = new Date(); today.setHours(0,0,0,0);
+        const finDpe = b.ademe && b.ademe.date_fin_dpe ? new Date(b.ademe.date_fin_dpe) : null;
+        const isExpired = finDpe && finDpe < today;
+        const isExpiringSoon = finDpe && !isExpired && (finDpe - today) < 365*24*3600*1000;
+        const finDpeStr = finDpe ? finDpe.toLocaleDateString('fr-FR') : null;
+        let html = '<div style="margin-top:10px;display:flex;flex-direction:column;gap:5px">';
+        if (b._numeroDpe) {
+          html += `<div style="font-size:11px;color:var(--sqh-gray4);display:flex;align-items:center;gap:6px">
+            <span style="font-weight:600;color:var(--sqh-dark)">N° DPE ADEME :</span>
+            <span style="font-family:monospace;letter-spacing:.3px">${b._numeroDpe}</span>
+            ${isExpired ? `<span style="background:#c00000;color:#fff;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">⚠ Expiré le ${finDpeStr}</span>`
+              : isExpiringSoon ? `<span style="background:#e08000;color:#fff;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">⏳ Expire le ${finDpeStr}</span>`
+              : finDpeStr ? `<span style="color:var(--sqh-gray3);font-size:10px">· valide jusqu'au ${finDpeStr}</span>` : ''}
+          </div>`;
+        }
+        if (b.audit && b.audit.nAudit) {
+          html += `<div style="font-size:11px;color:var(--sqh-gray4);display:flex;align-items:center;gap:6px">
+            <span style="font-weight:600;color:var(--sqh-dark)">N° Audit :</span>
+            <span style="font-family:monospace;letter-spacing:.3px">${b.audit.nAudit}</span>
+            <span style="color:var(--sqh-gray3);font-size:10px">· réalisé le ${b.audit.dateAudit} · valide jusqu'au ${b.audit.dateFinValidite}</span>
+          </div>`;
+        } else if (['E','F','G'].includes(b.dpe) && b._numeroDpe) {
+          html += `<div style="font-size:11px;background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:5px 9px;color:#7a5c00;display:flex;align-items:center;gap:6px">
+            <span>⚠️</span><span>Audit énergétique non disponible dans la base ADEME pour ce DPE ${b.dpe}.</span>
+          </div>`;
+        }
+        html += '</div>';
+        return html;
+      })()}
     </div>
 
     <!-- Navigation -->
@@ -1960,7 +1985,7 @@ function renderLetterTab(b) {
       <button class="btn btn-outline" onclick="downloadWordOne()">📄 Word — ce bien</button>
       <button class="btn btn-green" onclick="downloadWordAll()" style="background:var(--sqh-green-d)">📄 Word — ${biens.filter(x=>x.checked).length>0?'biens cochés':'tous les biens'}</button>
     </div>
-    <div class="letter-box" id="letter-content"><div class="ltr-header-preview"><img src="LOGO_ALLONGE_COULEUR.png" alt="Square Habitat" onerror="this.style.display='none'"/><div class="ltr-header-preview-agent"><strong>${agentFullName()}</strong>Conseiller Commercial Immobilier<br>${agentInfo.agence||'Square Habitat'}</div></div>${generateLetter(b)}</div>
+    <div class="letter-box" id="letter-content">${generateLetter(b)}</div>
   </div>`;
 }
 
@@ -1968,7 +1993,7 @@ function renderLetterTab(b) {
 function updateAgent(key, val) {
   agentInfo[key] = val;
   const lc = document.getElementById('letter-content');
-  if (lc && activeId !== null) lc.innerHTML = `<div class="ltr-header-preview"><img src="LOGO_ALLONGE_COULEUR.png" alt="Square Habitat" onerror="this.style.display='none'"/><div class="ltr-header-preview-agent"><strong>${agentFullName()}</strong>Conseiller Commercial Immobilier<br>${agentInfo.agence||'Square Habitat'}</div></div>${generateLetter(biens[activeId])}`;
+  if (lc && activeId !== null) lc.innerHTML = generateLetter(biens[activeId]);
 }
 
 // ── Letter generation ──────────────────────────────────────────────────────────
@@ -2036,12 +2061,11 @@ function generateLetter(b) {
   const typeBien = isAppt ? 'votre appartement' : 'votre bien';
   const secteurLabel = b.secteur ? ` (secteur ${b.secteur})` : '';
   const contextSecteur = ville ? `sur le secteur de ${ville}${secteurLabel}` : 'dans notre secteur';
-  const dateDpe = b.date ? ` établi le <strong>${b.date}</strong>` : ' récemment établi';
 
   /* ── Intro contextuelle ── */
   const introCtx = dpeGroup==='AB'
-    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`
-    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`;
+    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
+    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
 
   /* ── Paragraphe DPE enrichi ── */
   const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
@@ -2056,47 +2080,43 @@ function generateLetter(b) {
     dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui constitue un vrai atout sur le marché actuel. Les acheteurs sont de plus en plus sensibles aux performances énergétiques, et un bon classement DPE valorise significativement ${typeBien} lors d'une mise en vente ou d'une mise en location.`;
   }
 
-  /* ── Encart DPE 2 colonnes ── */
+  /* ── Encart DPE ── */
   const infoboxColor = (dpeGroup==='FG'||dpeGroup==='E') ? 'rouge' : 'teal';
   let dpeBox = '';
   if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
     const parts = [];
-    if (b.ademe.conso_ep_m2) parts.push(`⚡ Conso. : <strong>${b.ademe.conso_ep_m2} kWhep/m²/an</strong>`);
-    if (b.ademe.cout_annuel) parts.push(`💶 Coût annuel : <strong>${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €</strong>`);
-    if (b.ademe.energie) parts.push(`🔥 Énergie : <strong>${b.ademe.energie}</strong>`);
+    if (b.ademe.conso_ep_m2) parts.push(`⚡ Consommation : <strong>${b.ademe.conso_ep_m2} kWhep/m²/an</strong>`);
+    if (b.ademe.cout_annuel) parts.push(`💶 Coût annuel estimé : <strong>${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €</strong>`);
+    if (b.ademe.energie) parts.push(`🔥 Énergie principale : <strong>${b.ademe.energie}</strong>`);
     if (b.ademe.ges_m2) parts.push(`🌿 GES : <strong>${b.ademe.ges_m2} kgeqCO₂/m²/an</strong>`);
-    dpeBox = `<div class="ltr-infobox ltr-infobox--${infoboxColor}"><div class="ltr-grid2">${parts.map(p=>`<div>${p}</div>`).join('')}</div></div>`;
+    dpeBox = `<div class="ltr-infobox ltr-infobox--${infoboxColor}">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
   }
 
-  /* ── Encart Audit compact ── */
+  /* ── Encart Audit ── */
   let auditBlock = '';
   if (b.audit && b.audit.nAudit) {
-    const validSc = (b.audit.scenarios || [])
-      .filter(sc => sc.classeApres && sc.classeApres !== b.dpe && sc.cout > 0 && (sc.gainPct||sc.gainMin||0) > 0)
-      .slice(0, 3);
-    if (validSc.length) {
-      const scLines = validSc.map(sc =>
-        `<div class="ltr-sc-line">→ <strong>${sc.categorie}</strong> · DPE <strong>${sc.classeApres}</strong> · ~${Number(sc.cout||0).toLocaleString('fr-FR')} € · gain <strong>${sc.gainPct||sc.gainMin}%</strong></div>`
-      ).join('');
-      const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
-      auditBlock = `
-      <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
-      <p class="ltr-p">Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :</p>
-      <div class="ltr-infobox ltr-infobox--green">
-        ${scLines}
-        <div style="margin-top:4pt">En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation. 🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a></div>
-      </div>`;
-    }
+    const scLines = (b.audit.scenarios || []).slice(0, 3).map(sc =>
+      `→ <strong>${sc.categorie || 'Scénario'}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
+    ).join('<br>');
+    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
+    auditBlock = `
+    <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
+    <p class="ltr-p">Un audit énergétique (n° <strong>${b.audit.nAudit}</strong>${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :</p>
+    <div class="ltr-infobox ltr-infobox--green">
+      ${scLines}
+      <br><br>En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.<br>
+      🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a>
+    </div>`;
   }
 
   /* ── Paragraphe vente enrichi ── */
   let ventePara = '';
   if (dpeGroup==='FG' || dpeGroup==='E') {
-    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acquéreurs recherchent précisément des biens à rénover pour les valoriser à leur façon. Mon expertise du marché local me permet d'identifier les profils d'acheteurs adaptés et de vous accompagner vers une vente réussie — n'hésitez pas à me contacter pour en discuter.`;
+    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
   } else if (dpeGroup==='CD') {
-    ventePara = `Un DPE ${b.dpe} n'est pas un frein à la vente, bien au contraire : les acquéreurs sont de plus en plus attentifs aux performances énergétiques. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des profils les plus adaptés — contactez-moi pour en discuter sans engagement.`;
+    ventePara = `Si vous envisagez de vendre ${typeBien}, votre DPE ${b.dpe} est un atout supplémentaire : les acheteurs sont de plus en plus sensibles aux performances énergétiques. Je serais ravi de vous accompagner et de vous proposer les meilleures conditions de vente.`;
   } else {
-    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acquéreurs les plus exigeants — n'hésitez pas à me contacter pour un premier échange.`;
+    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
   }
 
   /* ── Gestion locative ── */
@@ -2106,7 +2126,8 @@ function generateLetter(b) {
 
 <p class="ltr-salut">${salut}</p>
 
-<p class="ltr-p">Je me permets de vous contacter au sujet de ${typeBien} situé : <strong>${b.adresse}</strong>.</p>
+<p class="ltr-p">Je me permets de vous contacter au sujet de ${typeBien} situé :</p>
+<p class="ltr-addr">${b.adresse}</p>
 
 <p class="ltr-p">${introCtx}</p>
 
@@ -2167,12 +2188,12 @@ function printLetter() {
 <meta charset="UTF-8"/>
 <title>Courrier — ${adresse}</title>
 <style>
-  @page { size: A4; margin: 10mm 14mm 10mm 18mm; }
+  @page { size: A4; margin: 14mm 16mm 14mm 22mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: 9pt;
-    line-height: 1.4;
+    font-size: 9.5pt;
+    line-height: 1.5;
     color: #1a1714;
     background: white;
   }
@@ -2182,51 +2203,51 @@ function printLetter() {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    padding-bottom: 7pt;
-    margin-bottom: 9pt;
+    padding-bottom: 9pt;
+    margin-bottom: 12pt;
     border-bottom: 2pt solid #038B92;
   }
-  .lh-brand { display: flex; align-items: center; gap: 6pt; }
+  .lh-brand { display: flex; align-items: center; gap: 8pt; }
   .lh-logo-img-wrap {
     flex-shrink: 0;
     display: flex; align-items: center;
   }
   .lh-name { font-family: Arial, sans-serif; }
-  .lh-name .sub { font-size: 7.5pt; color: #878A8D; margin-top: 1pt; }
+  .lh-name .sub { font-size: 8pt; color: #878A8D; margin-top: 1pt; }
   .lh-agent {
     text-align: right;
     font-family: Arial, sans-serif;
-    font-size: 7.5pt;
+    font-size: 8pt;
     color: #3D5044;
-    line-height: 1.4;
+    line-height: 1.5;
   }
-  .lh-agent strong { display: block; font-size: 8.5pt; color: #1E2A22; }
+  .lh-agent strong { display: block; font-size: 9pt; color: #1E2A22; }
 
   /* ── Corps ── */
   .lh-body { max-width: 100%; }
-  p { margin-bottom: 5pt; }
+  p { margin-bottom: 7pt; }
   p:empty { display: none; }
   strong { font-weight: 700; }
 
   /* ── Date ── */
-  p.ltr-date { text-align:right; font-family:Arial,sans-serif; font-size:8pt; color:#3D5044; margin-bottom:8pt; }
+  p.ltr-date { text-align:right; font-family:Arial,sans-serif; font-size:8.5pt; color:#3D5044; margin-bottom:10pt; }
 
   /* ── Formule d'appel ── */
-  p.ltr-salut { font-style:italic; margin-bottom:6pt; }
+  p.ltr-salut { font-style:italic; margin-bottom:8pt; }
 
   /* ── Paragraphe standard ── */
-  p.ltr-p { margin-bottom:5pt; line-height:1.45; }
+  p.ltr-p { margin-bottom:7pt; }
 
   /* ── Signature ── */
-  p.ltr-signature { font-family:Arial,sans-serif; font-size:8.5pt; margin-top:8pt; line-height:1.5; }
+  p.ltr-signature { font-family:Arial,sans-serif; font-size:9pt; margin-top:10pt; line-height:1.6; }
 
-  /* ── Adresse encadrée (legacy) ── */
+  /* ── Adresse encadrée ── */
   p.ltr-addr, p.addr-block {
     text-align: center;
     font-weight: 700;
-    font-size: 9.5pt;
-    margin: 7pt 0;
-    padding: 4pt 10pt;
+    font-size: 10pt;
+    margin: 10pt 0;
+    padding: 5pt 12pt;
     border: 1pt solid #C4CFC8;
     border-radius: 4pt;
     background: #F4F6F5;
@@ -2236,9 +2257,9 @@ function printLetter() {
   p.addr-block {
     text-align: center;
     font-weight: 700;
-    font-size: 9.5pt;
-    margin: 7pt 0;
-    padding: 4pt 10pt;
+    font-size: 10pt;
+    margin: 10pt 0;
+    padding: 5pt 12pt;
     border: 1pt solid #C4CFC8;
     border-radius: 4pt;
     background: #F4F6F5;
@@ -2247,26 +2268,24 @@ function printLetter() {
   /* ── Sections enrichies ── */
   .ltr-section-title {
     font-family: Arial, sans-serif;
-    font-size: 7pt;
+    font-size: 7.5pt;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: .5px;
     color: #009597;
     border-left: 3pt solid #009597;
     padding-left: 6pt;
-    margin: 7pt 0 3pt;
+    margin: 9pt 0 4pt;
   }
   .ltr-infobox {
-    padding: 4pt 8pt;
-    margin: 2pt 0 5pt;
+    padding: 5pt 9pt;
+    margin: 3pt 0 7pt;
     font-family: Arial, sans-serif;
-    font-size: 7.5pt;
-    line-height: 1.45;
+    font-size: 8pt;
+    line-height: 1.55;
     border-left: 3pt solid;
     border-radius: 3pt;
   }
-  .ltr-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1pt 10pt; }
-  .ltr-sc-line { font-size: 7.5pt; padding: 1pt 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ltr-infobox--rouge { background: #FDEDEB; border-color: #C0392B; color: #5a1a12; }
   .ltr-infobox--teal  { background: #E8F6F6; border-color: #009597; color: #0a3d3d; }
   .ltr-infobox--green { background: #EBF5EC; border-color: #006A4E; color: #0a2e1d; }
@@ -2274,14 +2293,14 @@ function printLetter() {
 
   /* ── Pied de page ── */
   .lh-footer {
-    margin-top: 10pt;
-    padding-top: 5pt;
+    margin-top: 14pt;
+    padding-top: 7pt;
     border-top: 1pt solid #C4CFC8;
     font-family: Arial, sans-serif;
-    font-size: 7pt;
+    font-size: 7.5pt;
     color: #878A8D;
     text-align: center;
-    line-height: 1.4;
+    line-height: 1.5;
   }
 
   @media print {
@@ -2496,21 +2515,29 @@ function letterToDocxParagraphs(b) {
     spacing: { after: 200 },
   }));
 
-  // ── Intro + adresse inline ───────────────────────────────────────────────────
+  // ── Intro + adresse ──────────────────────────────────────────────────────────
   paras.push(new Paragraph({
-    children: [
-      run(`Je me permets de vous contacter au sujet de ${typeBien} situé : `),
-      new TextRun({ text: b.adresse, font: 'Georgia', size: 22, bold: true, color: DARK }),
-      run('.'),
-    ],
-    spacing: { after: 160 },
+    children: [run(`Je me permets de vous contacter au sujet de ${typeBien} situé :`)],
+    spacing: { after: 100 },
   }));
 
-  // ── Intro contextuelle avec date DPE ────────────────────────────────────────
-  const dateDpe = b.date ? ` établi le <strong>${b.date}</strong>` : ' récemment établi';
+  paras.push(new Paragraph({
+    children: [new TextRun({ text: b.adresse, font: 'Georgia', size: 22, bold: true, color: DARK })],
+    alignment: AlignmentType.CENTER,
+    shading: { type: ShadingType.CLEAR, fill: 'F5F5F5' },
+    border: {
+      top:    { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 6 },
+      bottom: { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 6 },
+      left:   { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 8 },
+      right:  { style: BorderStyle.SINGLE, size: 6, color: 'BBBBBB', space: 8 },
+    },
+    spacing: { before: 80, after: 220 },
+  }));
+
+  // ── Intro contextuelle ───────────────────────────────────────────────────────
   const introCtx = dpeGroup==='AB'
-    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`
-    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique${dateDpe} pour ${typeBien}, et je souhaitais vous contacter directement.`;
+    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
+    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
   paras.push(bodyPara(introCtx));
 
   // ── Section DPE ──────────────────────────────────────────────────────────────
@@ -2528,51 +2555,40 @@ function letterToDocxParagraphs(b) {
   }
   paras.push(bodyPara(dpeText));
 
-  // Encart ADEME (labels courts)
+  // Encart ADEME
   const infoboxColor = (dpeGroup==='FG'||dpeGroup==='E') ? 'rouge' : 'teal';
   if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
     const dpeBoxLines = [];
-    if (b.ademe.conso_ep_m2) dpeBoxLines.push(`⚡ Conso. : ${b.ademe.conso_ep_m2} kWhep/m²/an`);
-    if (b.ademe.cout_annuel) dpeBoxLines.push(`💶 Coût annuel : ${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €`);
-    if (b.ademe.energie) dpeBoxLines.push(`🔥 Énergie : ${b.ademe.energie}`);
-    if (b.ademe.ges_m2) dpeBoxLines.push(`🌿 GES : ${b.ademe.ges_m2} kgeqCO₂/m²/an`);
+    if (b.ademe.conso_ep_m2) dpeBoxLines.push(`Consommation : ${b.ademe.conso_ep_m2} kWhep/m²/an`);
+    if (b.ademe.cout_annuel) dpeBoxLines.push(`Coût annuel estimé : ${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €`);
+    if (b.ademe.energie) dpeBoxLines.push(`Énergie principale : ${b.ademe.energie}`);
+    if (b.ademe.ges_m2) dpeBoxLines.push(`GES : ${b.ademe.ges_m2} kgeqCO₂/m²/an`);
     paras.push(...infoBox(dpeBoxLines, infoboxColor));
   }
 
   // ── Section Audit ────────────────────────────────────────────────────────────
   if (b.audit && b.audit.nAudit) {
-    const validSc = (b.audit.scenarios || [])
-      .filter(sc => sc.classeApres && sc.classeApres !== b.dpe && sc.cout > 0 && (sc.gainPct||sc.gainMin||0) > 0)
-      .slice(0, 3);
-    if (validSc.length) {
-      paras.push(sectionTitle('Audit énergétique & rénovation'));
-      const dateAudit = b.audit.dateAudit ? ` du ${b.audit.dateAudit}` : '';
-      paras.push(bodyPara(`Audit n° <strong>${b.audit.nAudit}</strong>${dateAudit} — scénarios identifiés :`));
-      validSc.forEach(sc => {
-        const cout = Number(sc.cout||0).toLocaleString('fr-FR');
-        const gain = sc.gainPct || sc.gainMin || '?';
-        const cat  = sc.categorie || 'Scénario';
-        paras.push(new Paragraph({
-          children: [
-            new TextRun({ text: '→ ', font: 'Arial', size: 20, color: GREEN, bold: true }),
-            new TextRun({ text: cat, font: 'Arial', size: 20, color: DARK, bold: true }),
-            new TextRun({ text: ' · DPE ', font: 'Arial', size: 20, color: DARK }),
-            new TextRun({ text: `${sc.classeApres}`, font: 'Arial', size: 20, color: DARK, bold: true }),
-            new TextRun({ text: ` · ~${cout} €`, font: 'Arial', size: 20, color: DARK }),
-            new TextRun({ text: ' · gain ', font: 'Arial', size: 20, color: DARK }),
-            new TextRun({ text: `${gain}%`, font: 'Arial', size: 20, color: DARK, bold: true }),
-          ],
-          shading: { type: ShadingType.CLEAR, fill: 'EBF5EC' },
-          border: { left: { style: BorderStyle.THICK, size: 20, color: GREEN, space: 8 } },
-          indent: { left: 160 },
-          spacing: { after: 40 },
-        }));
-      });
-      paras.push(...infoBox([
-        `En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans le financement de votre rénovation.`,
-        `🔗 j-ecorenove.credit-agricole.fr`,
-      ], 'green'));
-    }
+    paras.push(sectionTitle('Audit énergétique & rénovation'));
+    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
+    paras.push(bodyPara(`Un audit énergétique (n° ${b.audit.nAudit}${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`));
+    (b.audit.scenarios || []).slice(0, 3).forEach(sc => {
+      paras.push(new Paragraph({
+        children: [
+          new TextRun({ text: '→ ', font: 'Georgia', size: 22, color: TEAL, bold: true }),
+          new TextRun({ text: `${sc.categorie || 'Scénario'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+          new TextRun({ text: ` : atteindre DPE `, font: 'Georgia', size: 22, color: BODY }),
+          new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+          new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Georgia', size: 22, color: BODY }),
+          new TextRun({ text: `${sc.gainPct || sc.gainMin || '?'}%`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+        ],
+        indent: { left: 360 },
+        spacing: { after: 80 },
+      }));
+    });
+    paras.push(...infoBox([
+      `En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.`,
+      `🔗 j-ecorenove.credit-agricole.fr`,
+    ], 'green'));
   }
 
   // ── Section Estimation ───────────────────────────────────────────────────────
@@ -2582,11 +2598,11 @@ function letterToDocxParagraphs(b) {
   // ── Section Vente ────────────────────────────────────────────────────────────
   let ventePara = '';
   if (dpeGroup==='FG' || dpeGroup==='E') {
-    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acquéreurs recherchent précisément des biens à rénover pour les valoriser à leur façon. Mon expertise du marché local me permet d'identifier les profils d'acheteurs adaptés et de vous accompagner vers une vente réussie — n'hésitez pas à me contacter pour en discuter.`;
+    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
   } else if (dpeGroup==='CD') {
-    ventePara = `Un DPE ${b.dpe} n'est pas un frein à la vente, bien au contraire : les acquéreurs sont de plus en plus attentifs aux performances énergétiques. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des profils les plus adaptés — contactez-moi pour en discuter sans engagement.`;
+    ventePara = `Si vous envisagez de vendre ${typeBien}, votre DPE ${b.dpe} est un atout supplémentaire : les acheteurs sont de plus en plus sensibles aux performances énergétiques. Je serais ravi de vous accompagner et de vous proposer les meilleures conditions de vente.`;
   } else {
-    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acquéreurs les plus exigeants — n'hésitez pas à me contacter pour un premier échange.`;
+    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
   }
   paras.push(sectionTitle('Vous envisagez de vendre ?'));
   paras.push(bodyPara(ventePara));
@@ -3485,18 +3501,24 @@ async function fetchFromADEME() {
     const dpeRecords = await fetchAllPages(DPE_BASE, _ademeCPs, {
       dateField: 'date_etablissement_dpe', dateStart, dateEnd,
       dpeFilter, dpeFieldName: 'etiquette_dpe', typeFilter,
+      sortField: 'date_etablissement_dpe',
       selectFields: [
         'numero_dpe','etiquette_dpe','etiquette_ges',
-        'adresse_ban','code_postal_ban','nom_commune_ban','code_postal_brut',
+        'adresse_ban','numero_voie_ban','nom_rue_ban','adresse_complete_brut',
+        'code_postal_ban','nom_commune_ban','code_postal_brut','code_insee_ban',
+        'statut_geocodage',
         'type_batiment','surface_habitable_logement','surface_habitable_immeuble',
-        'date_etablissement_dpe',
+        'nombre_appartement',
+        'date_etablissement_dpe','date_fin_validite_dpe',
         'annee_construction','periode_construction',
         'type_energie_principale_chauffage','type_generateur_chauffage_principal',
+        'type_installation_chauffage','type_installation_ecs',
         'conso_5_usages_par_m2_ep','conso_5_usages_par_m2_ef',
         'emission_ges_5_usages_par_m2','cout_total_5_usages',
         'classe_inertie_batiment','type_ventilation','indicateur_confort_ete',
         'qualite_isolation_enveloppe','qualite_isolation_murs','qualite_isolation_menuiseries',
         'qualite_isolation_plancher_bas','qualite_isolation_plancher_haut_comble_perdu',
+        'qualite_isolation_plancher_haut_comble_amenage','qualite_isolation_plancher_haut_toit_terrasse',
         'coordonnee_cartographique_x_ban','coordonnee_cartographique_y_ban'
       ],
       onProgress: (idx, total, count) => ademeProgShow(
@@ -3526,7 +3548,7 @@ async function fetchFromADEME() {
           'n_audit','numero_dpe','date_etablissement_audit','date_fin_validite_audit',
           'adresse_ban','code_postal_ban','nom_commune_ban','code_postal_brut',
           'classe_bilan_dpe','surface_habitable_logement',
-          'annee_construction','periode_constuction',
+          'annee_construction','periode_construction',
           'type_energie_principale_chauffage','qualite_isolation_enveloppe','qualite_isolation_murs',
           'categorie_scenario','etape_travaux',
           'couts_cumules_travaux','gains_cumules_facture_max','gains_cumules_facture_min',
@@ -3584,7 +3606,7 @@ function toIsoDate(val) {
 
 async function fetchAllPages(baseUrl, cps, opts, signal) {
   const { dateField, dateStart, dateEnd, dpeFilter, dpeFieldName,
-          typeFilter, selectFields, onProgress } = opts;
+          typeFilter, selectFields, onProgress, sortField } = opts;
   let all = [];
 
   const dsMin = dateStart ? dateStart.slice(0, 10) : null;
@@ -3597,13 +3619,15 @@ async function fetchAllPages(baseUrl, cps, opts, signal) {
     if (onProgress) onProgress(ci, cps.length, all.length);
 
     // Seul paramètre serveur fiable : recherche Lucene sur code_postal_ban
-    const params = new URLSearchParams({
+    const paramObj = {
       size: 500,
       select: selectFields.join(','),
       qs_fields: 'code_postal_ban',
       qs: '"' + cp + '"',
-      sort: '-' + dateField,   // tri date décroissante → résultats récents en premier
-    });
+    };
+    // Le tri est optionnel : certains datasets (audit) ne supportent pas le tri par date
+    if (sortField) paramObj.sort = '-' + sortField;
+    const params = new URLSearchParams(paramObj);
 
     let after = null;
     while (all.length < ADEME_LIMIT) {
@@ -3661,52 +3685,28 @@ function buildAuditIndex(records) {
 
 function buildAuditMeta(lines) {
   const ref = lines[0];
-  const ORDER = { 'Minimal':1, 'Interm\u00e9diaire':2, 'BBC compatible':3, 'Multi-\u00e9tapes':4, 'En une \u00e9tape':5 };
-
-  // Remapping des libellés bruts ADEME vers des noms lisibles
-  function remapCat(raw) {
-    if (!raw) return 'Travaux';
-    const low = raw.toLowerCase();
-    if (low.includes('minimal'))       return 'Minimal';
-    if (low.includes('interm'))        return 'Interm\u00e9diaire';
-    if (low.includes('bbc'))           return 'BBC compatible';
-    if (low.includes('multi'))         return 'Multi-\u00e9tapes';
-    if (low.includes('une \u00e9tape') || low.includes('une etape')) return 'En une \u00e9tape';
-    return raw; // fallback : valeur brute
-  }
-
+  const ORDER = { 'Minimal':1, 'Interm\u00e9diaire':2, 'BBC compatible':3 };
   const catMap = {};
   lines.forEach(r => {
-    const rawCat = r.categorie_scenario || '';
-    // Exclure l'état initial et les lignes sans coût réel
-    if (!rawCat || rawCat.toLowerCase().includes('\u00e9tat initial') || rawCat.toLowerCase().includes('etat initial')) return;
-    const cout = r.couts_cumules_travaux != null ? Math.round(r.couts_cumules_travaux) : 0;
-    if (cout <= 0) return;
-    const cat = remapCat(rawCat);
+    const cat = r.categorie_scenario || 'Travaux';
     if (!catMap[cat] || r.etape_travaux > (catMap[cat].etape_travaux||0)) catMap[cat] = r;
   });
-
   const scenarios = Object.values(catMap)
-    .sort((a,b) => {
-      const ka = remapCat(a.categorie_scenario||'');
-      const kb = remapCat(b.categorie_scenario||'');
-      return (ORDER[ka]||9) - (ORDER[kb]||9);
-    })
-    .slice(0, 3)
+    .sort((a,b) => (ORDER[a.categorie_scenario]||9)-(ORDER[b.categorie_scenario]||9))
     .map(r => ({
-      categorie:   remapCat(r.categorie_scenario || 'Travaux'),
+      categorie:   r.categorie_scenario || 'Travaux',
       classeApres: (r.classe_bilan_dpe||'?').charAt(0).toUpperCase(),
       cout:        r.couts_cumules_travaux != null ? Math.round(r.couts_cumules_travaux) : null,
-      gainMax:     r.gains_cumules_facture_max != null ? Math.round(Math.abs(r.gains_cumules_facture_max)) : null,
-      gainMin:     r.gains_cumules_facture_min != null ? Math.round(Math.abs(r.gains_cumules_facture_min)) : null,
+      gainMax:     r.gains_cumules_facture_max != null ? Math.round(r.gains_cumules_facture_max) : null,
+      gainMin:     r.gains_cumules_facture_min != null ? Math.round(r.gains_cumules_facture_min) : null,
       gainPct:     r.gains_relatifs_cumules_conso_5_usages_m2_ep != null
-                   ? Math.round(Math.abs(r.gains_relatifs_cumules_conso_5_usages_m2_ep)*100) : null,
+                   ? Math.round(r.gains_relatifs_cumules_conso_5_usages_m2_ep*100) : null,
     }));
   return {
     nAudit:          ref.n_audit || '\u2014',
     dateAudit:       ref.date_etablissement_audit ? formatDate(ref.date_etablissement_audit) : '\u2014',
     dateFinValidite: ref.date_fin_validite_audit  ? formatDate(ref.date_fin_validite_audit)  : '\u2014',
-    annee:           ref.annee_construction || ref.periode_constuction || '\u2014',
+    annee:           ref.annee_construction || ref.periode_construction || '\u2014',
     energie:         ref.type_energie_principale_chauffage || '\u2014',
     isolEnv:         ref.qualite_isolation_enveloppe || '\u2014',
     isolMurs:        ref.qualite_isolation_murs || '\u2014',
@@ -3718,10 +3718,19 @@ function buildAuditMeta(lines) {
 function ademeNormalize(r, i) {
   const cp    = normCP(r.code_postal_ban) !== '00000' ? normCP(r.code_postal_ban) : normCP(r.code_postal_brut);
   const ville = r.nom_commune_ban || '';
-  const _banAlreadyHasCP = r.adresse_ban && cp && r.adresse_ban.includes(cp);
+  // Chaîne de fallback : BAN géocodée → reconstruction BAN → brut diagnostiqueur → CP+ville
+  let rawAddr = '';
+  if (r.adresse_ban) {
+    rawAddr = r.adresse_ban.trim();
+  } else if (r.numero_voie_ban && r.nom_rue_ban) {
+    rawAddr = (r.numero_voie_ban + ' ' + r.nom_rue_ban).trim();
+  } else if (r.adresse_complete_brut) {
+    rawAddr = r.adresse_complete_brut.trim();
+  }
+  const _banAlreadyHasCP = rawAddr && cp && rawAddr.includes(cp);
   const adresse = _banAlreadyHasCP
-    ? (r.adresse_ban || '').trim()
-    : [r.adresse_ban, cp||null, ville].filter(Boolean).join(' ').trim();
+    ? rawAddr
+    : [rawAddr||null, cp||null, ville].filter(Boolean).join(' ').trim();
   const dpe = (r.etiquette_dpe||'?').charAt(0).toUpperCase();
   const ges = (r.etiquette_ges||'?').charAt(0).toUpperCase();
   const surf = r.surface_habitable_logement || r.surface_habitable_immeuble || null;
@@ -3744,7 +3753,7 @@ function ademeNormalize(r, i) {
     villeFromAddr:ville, cpFromAddr:cp,
     geo, geoStatus: geo?'ok':'none',
     checked:false, visible:true,
-    _codeInsee: r.code_commune_ban || null,
+    _codeInsee: r.code_insee_ban || null,
     _numeroDpe: r.numero_dpe || null,
     ademe:{
       conso_ep_m2:  r.conso_5_usages_par_m2_ep  != null ? Math.round(r.conso_5_usages_par_m2_ep)  : null,
@@ -3753,7 +3762,10 @@ function ademeNormalize(r, i) {
       cout_annuel:  r.cout_total_5_usages != null ? Math.round(r.cout_total_5_usages) : null,
       energie:      r.type_energie_principale_chauffage || null,
       generateur:   r.type_generateur_chauffage_principal || null,
+      install_chauffage: r.type_installation_chauffage || null,
+      install_ecs:  r.type_installation_ecs || null,
       annee:        r.annee_construction || r.periode_construction || null,
+      nb_appartements: r.nombre_appartement || null,
       inertie:      r.classe_inertie_batiment || null,
       ventilation:  r.type_ventilation || null,
       confort_ete:  r.indicateur_confort_ete || null,
@@ -3761,7 +3773,11 @@ function ademeNormalize(r, i) {
       iso_murs:     r.qualite_isolation_murs || null,
       iso_menuiseries: r.qualite_isolation_menuiseries || null,
       iso_ph_perdu: r.qualite_isolation_plancher_haut_comble_perdu || null,
+      iso_ph_amenage: r.qualite_isolation_plancher_haut_comble_amenage || null,
+      iso_ph_terrasse: r.qualite_isolation_plancher_haut_toit_terrasse || null,
       iso_pb:       r.qualite_isolation_plancher_bas || null,
+      date_fin_dpe: r.date_fin_validite_dpe || null,
+      statut_geocodage: r.statut_geocodage || null,
     },
     audit: null,
     suivi:{ nom:'', prenom:'', telephone:'', email:'', projet:'', statut:'', dateRelance:'', notes:'' },
@@ -3822,13 +3838,19 @@ function renderAdemeInfo(a) {
     + '<div class="info-extra-item"><div class="lbl">Inertie thermique</div><div class="val">' + (a.inertie||'\u2014') + '</div></div>'
     + '<div class="info-extra-item"><div class="lbl">Confort \u00e9t\u00e9</div><div class="val">' + (a.confort_ete||'\u2014') + '</div></div>'
     + '<div class="info-extra-item"><div class="lbl">Ventilation</div><div class="val">' + (a.ventilation||'\u2014') + '</div></div>'
+    + '<div class="info-extra-item"><div class="lbl">Installation chauffage</div><div class="val">' + (a.install_chauffage||'\u2014') + '</div></div>'
+    + '<div class="info-extra-item"><div class="lbl">Installation ECS</div><div class="val">' + (a.install_ecs||'\u2014') + '</div></div>'
+    + (a.nb_appartements ? '<div class="info-extra-item"><div class="lbl">Nb appartements</div><div class="val">' + a.nb_appartements + '</div></div>' : '')
     + '</div>'
     + '<div class="section-hd">\ud83e\uddf1 Isolation</div>'
     + '<div class="info-extra-grid">'
     + '<div class="info-extra-item"><div class="lbl">Enveloppe</div><div class="val" style="color:' + isoColor(a.iso_env) + '">' + (a.iso_env||'\u2014') + '</div></div>'
     + '<div class="info-extra-item"><div class="lbl">Murs</div><div class="val" style="color:' + isoColor(a.iso_murs) + '">' + (a.iso_murs||'\u2014') + '</div></div>'
     + '<div class="info-extra-item"><div class="lbl">Menuiseries</div><div class="val" style="color:' + isoColor(a.iso_menuiseries) + '">' + (a.iso_menuiseries||'\u2014') + '</div></div>'
-    + '<div class="info-extra-item"><div class="lbl">Combles</div><div class="val" style="color:' + isoColor(a.iso_ph_perdu) + '">' + (a.iso_ph_perdu||'\u2014') + '</div></div>'
+    + '<div class="info-extra-item"><div class="lbl">Combles perdus</div><div class="val" style="color:' + isoColor(a.iso_ph_perdu) + '">' + (a.iso_ph_perdu||'\u2014') + '</div></div>'
+    + '<div class="info-extra-item"><div class="lbl">Combles am\u00e9nag\u00e9s</div><div class="val" style="color:' + isoColor(a.iso_ph_amenage) + '">' + (a.iso_ph_amenage||'\u2014') + '</div></div>'
+    + '<div class="info-extra-item"><div class="lbl">Toit-terrasse</div><div class="val" style="color:' + isoColor(a.iso_ph_terrasse) + '">' + (a.iso_ph_terrasse||'\u2014') + '</div></div>'
+    + '<div class="info-extra-item"><div class="lbl">Plancher bas</div><div class="val" style="color:' + isoColor(a.iso_pb) + '">' + (a.iso_pb||'\u2014') + '</div></div>'
     + '</div>';
 }
 
