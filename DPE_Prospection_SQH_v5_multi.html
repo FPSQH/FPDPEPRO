@@ -3531,40 +3531,28 @@ async function fetchFromADEME() {
     await tick();
     const biens = dpeRecords.map((r, i) => ademeNormalize(r, i));
 
-    // Phase 2 : Audit pour les E/F/G
+    // Phase 2 : Audit pour les E/F/G — recherche par numero_dpe (seul filtre fiable sur audit-opendata)
     const auditNeeded = dpeFilter.length === 0
       ? [...AUDIT_CLASSES]
       : dpeFilter.filter(d => AUDIT_CLASSES.has(d));
 
     let auditByNumeroDpe = {};
     if (auditNeeded.length > 0 && biens.length > 0) {
-      ademeProgShow('R\u00e9cup\u00e9ration Audits E/F/G\u2026', 55, biens.length + ' logements');
-      await tick();
-      const auditRecords = await fetchAllPages(AUDIT_BASE, _ademeCPs, {
-        dateField: 'date_etablissement_audit',
-        dateStart: '2023-04-01', dateEnd: new Date().toISOString().slice(0,10),
-        dpeFilter: [], dpeFieldName: null,
-        filterMode: 'qs_only',
-        selectFields: [
-          'n_audit','numero_dpe','date_etablissement_audit','date_fin_validite_audit',
-          'adresse_ban','code_postal_ban','nom_commune_ban','code_postal_brut',
-          'classe_bilan_dpe','surface_habitable_logement',
-          'annee_construction','periode_construction',
-          'type_energie_principale_chauffage','qualite_isolation_enveloppe','qualite_isolation_murs',
-          'categorie_scenario','etape_travaux',
-          'couts_cumules_travaux','gains_cumules_facture_max','gains_cumules_facture_min',
-          'gains_relatifs_cumules_conso_5_usages_m2_ep','ep_conso_5_usages_m2'
-        ],
-        onProgress: (idx, total, count) => ademeProgShow(
-          'Audits \u2014 CP ' + _ademeCPs[idx] + ' (' + (idx+1) + '/' + total + ')',
-          55 + Math.round((idx/total)*35), count + ' lignes d\'audit'
-        )
-      }, _ademeAbort.signal);
-
-      auditByNumeroDpe = buildAuditIndex(auditRecords);
-      ademeProgShow('Association Audit \u2194 DPE\u2026', 92,
-        Object.keys(auditByNumeroDpe).length + ' audits trouv\u00e9s');
-      await tick();
+      const efgNumeroDpe = [...new Set(
+        biens
+          .filter(b => auditNeeded.includes((b.dpe || '').charAt(0).toUpperCase()))
+          .map(b => b._numeroDpe)
+          .filter(Boolean)
+      )];
+      if (efgNumeroDpe.length > 0) {
+        ademeProgShow('R\u00e9cup\u00e9ration Audits E/F/G\u2026', 55, efgNumeroDpe.length + ' DPE \u00e0 auditer');
+        await tick();
+        const auditRecords = await fetchAuditByNumeroDpe(efgNumeroDpe, _ademeAbort.signal);
+        auditByNumeroDpe = buildAuditIndex(auditRecords);
+        ademeProgShow('Association Audit \u2194 DPE\u2026', 92,
+          Object.keys(auditByNumeroDpe).length + ' audits trouv\u00e9s');
+        await tick();
+      }
     }
 
     // Phase 3 : Association
@@ -3679,6 +3667,43 @@ async function fetchAllPages(baseUrl, cps, opts, signal) {
 }
 
 // ── Audit index keyed by numero_dpe ──────────────────────────────────────────
+// ── Audit fetch par numero_dpe (filtre direct — seule méthode fiable sur audit-opendata) ────
+async function fetchAuditByNumeroDpe(numeroDpeList, signal) {
+  const AUDIT_SELECT = [
+    'n_audit','numero_dpe','date_etablissement_audit','date_fin_validite_audit',
+    'adresse_ban','code_postal_ban','nom_commune_ban','code_postal_brut',
+    'classe_bilan_dpe','surface_habitable_logement',
+    'annee_construction','periode_construction',
+    'categorie_scenario','etape_travaux',
+    'couts_cumules_travaux','gains_cumules_facture_max','gains_cumules_facture_min',
+    'gains_relatifs_cumules_conso_5_usages_m2_ep','ep_conso_5_usages_m2'
+  ].join(',');
+
+  // Data Fair supporte le filtre exact : numero_dpe=val1,val2,val3 (OR implicite)
+  // On envoie par lots pour rester sous la limite d'URL (~50 numéros par batch)
+  const BATCH = 50;
+  let all = [];
+
+  for (let i = 0; i < numeroDpeList.length; i += BATCH) {
+    if (signal && signal.aborted) break;
+    const batch = numeroDpeList.slice(i, i + BATCH);
+    const url = AUDIT_BASE + '?size=500&select=' + encodeURIComponent(AUDIT_SELECT)
+              + '&numero_dpe=' + encodeURIComponent(batch.join(','));
+    try {
+      const resp = await fetch(url, { signal });
+      if (!resp.ok) {
+        console.warn('Audit fetch HTTP ' + resp.status + ' pour batch ' + i);
+        continue;
+      }
+      const data = await resp.json();
+      all = all.concat(data.results || []);
+    } catch(e) {
+      if (e.name !== 'AbortError') console.warn('Audit fetch error:', e);
+    }
+  }
+  return all;
+}
+
 function buildAuditIndex(records) {
   const byNdpe = {};
   records.forEach(r => {
