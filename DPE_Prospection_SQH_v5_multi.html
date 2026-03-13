@@ -3544,6 +3544,7 @@ async function fetchFromADEME() {
         dateField: 'date_etablissement_audit',
         dateStart: '2023-04-01', dateEnd: new Date().toISOString().slice(0,10),
         dpeFilter: [], dpeFieldName: null,
+        filterMode: 'direct',
         selectFields: [
           'n_audit','numero_dpe','date_etablissement_audit','date_fin_validite_audit',
           'adresse_ban','code_postal_ban','nom_commune_ban','code_postal_brut',
@@ -3606,26 +3607,28 @@ function toIsoDate(val) {
 
 async function fetchAllPages(baseUrl, cps, opts, signal) {
   const { dateField, dateStart, dateEnd, dpeFilter, dpeFieldName,
-          typeFilter, selectFields, onProgress, sortField } = opts;
+          typeFilter, selectFields, onProgress, sortField, filterMode } = opts;
+  // filterMode: 'qs' (défaut, Lucene — DPE dataset) ou 'direct' (filtre exact — audit dataset)
+  const useDirectFilter = filterMode === 'direct';
   let all = [];
 
   const dsMin = dateStart ? dateStart.slice(0, 10) : null;
   const dsMax = dateEnd   ? dateEnd.slice(0, 10)   : null;
 
-  // Une requête par CP via qs (seul filtre serveur fiable sur ce dataset)
   for (let ci = 0; ci < cps.length; ci++) {
     if (all.length >= ADEME_LIMIT) break;
     const cp = cps[ci];
     if (onProgress) onProgress(ci, cps.length, all.length);
 
-    // Seul paramètre serveur fiable : recherche Lucene sur code_postal_ban
-    const paramObj = {
-      size: 500,
-      select: selectFields.join(','),
-      qs_fields: 'code_postal_ban',
-      qs: '"' + cp + '"',
-    };
-    // Le tri est optionnel : certains datasets (audit) ne supportent pas le tri par date
+    const paramObj = { size: 500, select: selectFields.join(',') };
+    if (useDirectFilter) {
+      // Filtre direct Data Fair : code_postal_ban=XXXXX (pas de Lucene)
+      paramObj['code_postal_ban'] = cp;
+    } else {
+      // Recherche Lucene sur code_postal_ban (DPE dataset)
+      paramObj['qs_fields'] = 'code_postal_ban';
+      paramObj['qs'] = '"' + cp + '"';
+    }
     if (sortField) paramObj.sort = '-' + sortField;
     const params = new URLSearchParams(paramObj);
 
