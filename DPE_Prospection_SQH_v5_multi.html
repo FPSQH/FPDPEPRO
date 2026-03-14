@@ -318,7 +318,7 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 .letter-box{
   background:#FEFEF8;border:1px solid var(--sqh-gray2);
   border-radius:var(--radius);padding:24px 28px;
-  font-family:Georgia,serif;font-size:13px;line-height:1.9;
+  font-family:Arial,sans-serif;font-size:13px;line-height:1.9;
   color:#1a1714;white-space:normal
 }
 /* ── Lettre enrichie ─────────────────────────────────────────────── */
@@ -2184,7 +2184,7 @@ function buildLetterContent(b) {
 
   const hasAudit = !!(b.audit && b.audit.nAudit);
   const auditDateLabel = (b.audit && b.audit.dateAudit) ? ` réalisé le ${b.audit.dateAudit}` : '';
-  const auditScenarios = hasAudit ? (b.audit.scenarios || []).slice(0, 3) : [];
+  const auditScenarios = hasAudit ? (b.audit.scenarios || []).filter(sc => !/état\s*initial/i.test(sc.categorie || '')).slice(0, 3) : [];
 
   let ventePara = '';
   if (dpeGroup==='FG' || dpeGroup==='E') {
@@ -2217,18 +2217,17 @@ function generateLetter(b) {
   let dpeBox = '';
   if (d.ademeItems.length) {
     const parts = d.ademeItems.map(({emoji, label, value}) => `${emoji} ${label} : <strong>${value}</strong>`);
-    const adLine1 = parts.slice(0, 2).join(' &nbsp;·&nbsp; ');
-    const adLine2 = parts.slice(2).join(' &nbsp;·&nbsp; ');
+    const adLine1 = [parts[0], parts[2]].filter(Boolean).join(' &nbsp;·&nbsp; ');
+    const adLine2 = [parts[1], parts[3]].filter(Boolean).join(' &nbsp;·&nbsp; ');
     dpeBox = `<div class="ltr-infobox ltr-infobox--${d.infoboxColor}">${adLine1}${adLine2 ? '<br>' + adLine2 : ''}</div>`;
   }
 
   /* ── Encart Audit ── */
   let auditBlock = '';
   if (d.hasAudit) {
-    const initialLine = `→ <strong>État initial</strong> : DPE <strong>${d.dpe}</strong>`;
-    const scLines = [initialLine, ...d.auditScenarios.map(sc =>
-      `→ <strong>${sc.categorie || 'Scénario'}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
-    )].join('<br>');
+    const scLines = d.auditScenarios.map(sc =>
+      `→ <strong>${(sc.categorie || 'Scénario').replace(/principale?/gi, '').trim()}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
+    ).join('<br>');
     auditBlock = `
     <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
     <p class="ltr-p">Un audit énergétique (n° <strong>${d.auditNAudit}</strong>${d.auditDateLabel}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :</p>
@@ -2267,7 +2266,7 @@ ${glBlock}
 <p class="ltr-p">Dans l'attente de votre retour, je vous adresse, ${d.signoff}, mes cordiales salutations.</p>
 
 <p class="ltr-signature"><strong>${agentFullName()}</strong><br>
-Conseiller Commercial Immobilier — ${agentInfo.agence}<br>
+Conseiller Immobilier — ${agentInfo.agence}<br>
 📞 ${agentInfo.telephone}${agentInfo.telephoneFixe ? ' | ' + agentInfo.telephoneFixe : ''}<br>
 ✉ ${agentInfo.email}</p>`;
 }
@@ -2310,7 +2309,7 @@ function printLetter() {
   @page { size: A4; margin: 14mm 16mm 14mm 22mm; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: Georgia, 'Times New Roman', serif;
+    font-family: Arial, sans-serif;
     font-size: 9.5pt;
     line-height: 1.5;
     color: #1a1714;
@@ -2406,7 +2405,7 @@ function printLetter() {
     </div>
     <div class="lh-agent">
       <strong>${agentFullName()}</strong>
-      Conseiller Commercial Immobilier<br>
+      Conseiller Immobilier<br>
       ${agentInfo.telephone ? '📞 ' + agentInfo.telephone + (agentInfo.telephoneFixe ? ' | ' + agentInfo.telephoneFixe : '') + '<br>' : ''}
       ${agentInfo.telephoneFixe && !agentInfo.telephone ? '📞 ' + agentInfo.telephoneFixe + '<br>' : ''}
       ${agentInfo.email ? '✉ ' + agentInfo.email : ''}
@@ -2448,7 +2447,7 @@ function letterToDocxParagraphs(b) {
   const TEAL = '009597', GREEN = '006A4E', RED = 'C0392B', DARK = '1A1A1A', GREY = '706F6F', BODY = '2a2a2a';
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
-  const run = (text, opts={}) => new TextRun({ text, font: 'Georgia', size: 20, color: BODY, ...opts });
+  const run = (text, opts={}) => new TextRun({ text, font: 'Arial', size: 20, color: BODY, ...opts });
 
   const richRuns = (text, baseOpts={}) => {
     const runs = [];
@@ -2457,7 +2456,7 @@ function letterToDocxParagraphs(b) {
     for (const part of parts) {
       if (part === '<strong>') { bold = true; continue; }
       if (part === '</strong>') { bold = false; continue; }
-      if (part) runs.push(new TextRun({ text: part, font: 'Georgia', size: 20, color: BODY, bold, ...baseOpts }));
+      if (part) runs.push(new TextRun({ text: part, font: 'Arial', size: 20, color: BODY, bold, ...baseOpts }));
     }
     return runs;
   };
@@ -2522,7 +2521,7 @@ function letterToDocxParagraphs(b) {
     }),
     new Paragraph({
       alignment: AlignmentType.RIGHT,
-      children: [new TextRun({ text: 'Conseiller Commercial Immobilier', font: 'Arial', size: 15, color: GREY })],
+      children: [new TextRun({ text: 'Conseiller Immobilier', font: 'Arial', size: 15, color: GREY })],
       spacing: { after: 20 },
     }),
     agentInfo.email ? new Paragraph({
@@ -2578,7 +2577,7 @@ function letterToDocxParagraphs(b) {
     alignment: AlignmentType.BOTH,
     children: [
       run(`Je me permets de vous contacter au sujet de ${d.typeBien} situé : `),
-      new TextRun({ text: d.adresse, font: 'Georgia', size: 20, bold: true, color: DARK }),
+      new TextRun({ text: d.adresse, font: 'Arial', size: 20, bold: true, color: DARK }),
     ],
     spacing: { after: 120 },
   }));
@@ -2591,10 +2590,10 @@ function letterToDocxParagraphs(b) {
   paras.push(bodyPara(d.dpeText));
 
   if (d.ademeItems.length) {
-    const pairs = [];
-    for (let i = 0; i < d.ademeItems.length; i += 2) {
-      pairs.push(d.ademeItems.slice(i, i + 2).map(({emoji, label, value}) => `${emoji} ${label} : ${value}`).join('   ·   '));
-    }
+    const evenItems = d.ademeItems.filter((_, i) => i % 2 === 0);
+    const oddItems  = d.ademeItems.filter((_, i) => i % 2 === 1);
+    const pairs = [evenItems, oddItems].filter(g => g.length > 0)
+      .map(g => g.map(({emoji, label, value}) => `${emoji} ${label} : ${value}`).join('   ·   '));
     paras.push(...infoBox(pairs, d.infoboxColor));
   }
 
@@ -2602,27 +2601,16 @@ function letterToDocxParagraphs(b) {
   if (d.hasAudit) {
     paras.push(sectionTitle('Audit énergétique & rénovation'));
     paras.push(bodyPara(`Un audit énergétique (n° ${d.auditNAudit}${d.auditDateLabel}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`));
-    // Ligne état initial
-    paras.push(new Paragraph({
-      children: [
-        new TextRun({ text: '→ ', font: 'Georgia', size: 20, color: TEAL, bold: true }),
-        new TextRun({ text: 'État initial', font: 'Georgia', size: 20, color: BODY, bold: true }),
-        new TextRun({ text: ' : DPE ', font: 'Georgia', size: 20, color: BODY }),
-        new TextRun({ text: d.dpe, font: 'Georgia', size: 20, color: BODY, bold: true }),
-      ],
-      indent: { left: 360 },
-      spacing: { after: 60 },
-    }));
     // Scénarios de rénovation
     d.auditScenarios.forEach(sc => {
       paras.push(new Paragraph({
         children: [
-          new TextRun({ text: '→ ', font: 'Georgia', size: 20, color: TEAL, bold: true }),
-          new TextRun({ text: `${sc.categorie || 'Scénario'}`, font: 'Georgia', size: 20, color: BODY, bold: true }),
-          new TextRun({ text: ` : atteindre DPE `, font: 'Georgia', size: 20, color: BODY }),
-          new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Georgia', size: 20, color: BODY, bold: true }),
-          new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Georgia', size: 20, color: BODY }),
-          new TextRun({ text: `${sc.gainPct || sc.gainMin || '?'}%`, font: 'Georgia', size: 20, color: BODY, bold: true }),
+          new TextRun({ text: '→ ', font: 'Arial', size: 20, color: TEAL, bold: true }),
+          new TextRun({ text: `${(sc.categorie || 'Scénario').replace(/principale?/gi, '').trim()}`, font: 'Arial', size: 20, color: BODY, bold: true }),
+          new TextRun({ text: ` : atteindre DPE `, font: 'Arial', size: 20, color: BODY }),
+          new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Arial', size: 20, color: BODY, bold: true }),
+          new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Arial', size: 20, color: BODY }),
+          new TextRun({ text: `${sc.gainPct || sc.gainMin || '?'}%`, font: 'Arial', size: 20, color: BODY, bold: true }),
         ],
         indent: { left: 360 },
         spacing: { after: 60 },
@@ -2661,7 +2649,7 @@ function letterToDocxParagraphs(b) {
     spacing: { after: 40 },
   }));
   paras.push(new Paragraph({
-    children: [new TextRun({ text: `Conseiller Commercial Immobilier — ${agentInfo.agence}`, font: 'Arial', size: 18, color: GREY })],
+    children: [new TextRun({ text: `Conseiller Immobilier — ${agentInfo.agence}`, font: 'Arial', size: 18, color: GREY })],
     spacing: { after: 40 },
   }));
   const sigTel = [agentInfo.telephone, agentInfo.telephoneFixe].filter(Boolean).join(' | ');
