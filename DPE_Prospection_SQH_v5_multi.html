@@ -1092,6 +1092,7 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
     <!-- MAIN -->
     <div class="content">
       <div id="map"></div>
+      <div id="map-layer-toggle" style="position:absolute;top:10px;right:10px;z-index:400;display:flex;gap:0;border-radius:6px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.25)"><button id="btn-layer-plan" onclick="setMapLayer('plan')" style="padding:5px 11px;font-size:11px;font-weight:700;border:none;cursor:pointer;background:var(--sqh-green);color:white;font-family:inherit">🗺️ Plan</button><button id="btn-layer-sat"  onclick="setMapLayer('sat')"  style="padding:5px 11px;font-size:11px;font-weight:700;border:none;cursor:pointer;background:white;color:var(--sqh-gray5);font-family:inherit">🛰️ Satellite</button></div>
 
       <!-- ITINERARY OVERLAY -->
       <div class="itin-overlay" id="itin-panel">
@@ -1118,6 +1119,7 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
           <div class="detail-tab" id="tab-prospection" onclick="switchTab('prospection',this)">📞 Prospection<span class="suivi-badge" id="suivi-badge-dot"></span></div>
           <div class="detail-tab active" id="tab-bien" onclick="switchTab('bien',this)">🏠 Bien</div>
           <div class="detail-tab" id="tab-reno" onclick="switchTab('reno',this)">🔍 Rénovation</div>
+          <div class="detail-tab" id="tab-marche" onclick="switchTab('marche',this)">📊 Marché</div>
         </div>
         <div class="detail-body" id="detail-body">
           <div class="empty">
@@ -1680,12 +1682,31 @@ function updateGeoStatusText() {
 const DPE_BG = {A:'#1a5c38',B:'#1a5228',C:'#4a6010',D:'#7a6800',E:'#7a4400',F:'#7a2010',G:'#5a0808','?':'#888'};
 const DPE_FG = {A:'#7effc0',B:'#6ef098',C:'#c0f060',D:'#ffd840',E:'#ffb060',F:'#ff7060',G:'#ff5050','?':'#fff'};
 
+var _currentLayer = 'plan';
+var _tileLayerRef = null;
+var _TILE_PLAN = 'https://data.geopf.fr/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
+var _TILE_SAT  = 'https://data.geopf.fr/wmts?REQUEST=GetTile&SERVICE=WMTS&VERSION=1.0.0&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/jpeg&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
+
 function initMap() {
   if (leafletMap) return;
   leafletMap = L.map('map', { zoomControl: true }).setView([48.5, -3.0], 9);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 20
-  }).addTo(leafletMap);
+  _tileLayerRef = L.tileLayer(_TILE_PLAN, { attribution: '© <a href="https://www.ign.fr/">IGN Géoportail</a>', maxZoom: 19 }).addTo(leafletMap);
+}
+
+function setMapLayer(type) {
+  if (!leafletMap || _currentLayer === type) return;
+  _currentLayer = type;
+  if (_tileLayerRef) leafletMap.removeLayer(_tileLayerRef);
+  var url = type === 'sat' ? _TILE_SAT : _TILE_PLAN;
+  _tileLayerRef = L.tileLayer(url, { attribution: '© <a href="https://www.ign.fr/">IGN Géoportail</a>', maxZoom: 19 }).addTo(leafletMap);
+  var btnPlan = document.getElementById('btn-layer-plan');
+  var btnSat  = document.getElementById('btn-layer-sat');
+  if (btnPlan && btnSat) {
+    btnPlan.style.background = type === 'plan' ? 'var(--sqh-green)' : 'white';
+    btnPlan.style.color      = type === 'plan' ? 'white' : 'var(--sqh-gray5)';
+    btnSat.style.background  = type === 'sat'  ? 'var(--sqh-green)' : 'white';
+    btnSat.style.color       = type === 'sat'  ? 'white' : 'var(--sqh-gray5)';
+  }
 }
 
 function isCheckedOrAll(bien) {
@@ -1873,7 +1894,7 @@ function switchToReno() {
 function showDetailTabs() {
   document.getElementById('detail-tabs').style.display = 'flex';
   document.querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
-  var tabId = {bien:'tab-bien',reno:'tab-reno',prospection:'tab-prospection',letter:'tab-letter'}[activeTab];
+  var tabId = {bien:'tab-bien',reno:'tab-reno',prospection:'tab-prospection',letter:'tab-letter',marche:'tab-marche'}[activeTab];
   if (tabId) document.getElementById(tabId)?.classList.add('active');
 }
 function showDetailEmpty() {
@@ -1937,6 +1958,8 @@ function renderDetail() {
     // No restoreSuiviForm needed — values baked into template
   } else if (activeTab === 'letter') {
     body.innerHTML = renderLetterTab(b);
+  } else if (activeTab === 'marche') {
+    renderMarcheTab(b);
   } else {
     body.innerHTML = renderBienTab_sync(b);
   }
@@ -2028,14 +2051,10 @@ function renderBienTab_sync(b) {
       })()}
     </div>
 
-    <!-- Navigation -->
-    <div class="section-hd">🔗 Navigation & données</div>
+    <!-- Accès rapide -->
     <div class="action-row" style="margin-bottom:14px">
-      <a href="${wazeUrl}" target="_blank" class="btn btn-waze">🚗 Waze</a>
-      <a href="${mapsUrl}" target="_blank" class="btn btn-maps">📍 Google Maps</a>
-      ${dvfUrl ? `<a href="${dvfUrl}" target="_blank" class="btn btn-outline">📊 DVF</a>` : ''}
-      <a href="${exploreUrl}" target="_blank" class="btn btn-outline">🏛️ data.gouv</a>
-      <button class="btn btn-green" onclick="switchToLetter()">✉️ Courrier</button>
+      <button class="btn btn-green" onclick="switchToLetter()">✉️ Générer un courrier</button>
+      <button class="btn btn-outline" onclick="switchToReno()">🔍 Rénovation &amp; aides</button>
     </div>
 
     <!-- Caractéristiques -->
@@ -2943,9 +2962,15 @@ function renderProspectionTab(b) {
 
   const suiviStatus = statuts.length ? statuts.map(v => `<span class="badge" style="background:${STATUT_COLORS[v]||'var(--sqh-gray2)'};color:white;margin-left:4px">${v}</span>`).join('') : '';
 
+  const wazeUrlP = b.geo ? ('https://www.waze.com/ul?ll='+b.geo.lat+','+b.geo.lon+'&navigate=yes') : '#';
+  const mapsUrlP = b.geo ? ('https://www.google.com/maps/search/?api=1&query='+b.geo.lat+','+b.geo.lon) : '#';
   return `<div class="fadein" style="padding-bottom:16px">
-    <div style="font-size:12px;font-weight:700;color:var(--sqh-dark);margin-bottom:12px;line-height:1.3;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
+    <div style="font-size:12px;font-weight:700;color:var(--sqh-dark);margin-bottom:8px;line-height:1.3;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
       ${b.adresse}${suiviStatus}
+    </div>
+    <div class="action-row" style="margin-bottom:14px">
+      <a href="${wazeUrlP}" target="_blank" class="btn btn-waze">🚗 Waze</a>
+      <a href="${mapsUrlP}" target="_blank" class="btn btn-maps">📍 Google Maps</a>
     </div>
 
     <!-- Stratégie commerciale -->
@@ -4106,6 +4131,8 @@ function buildGeorisquesHTML(risques) {
     <div style="font-size:10px;color:var(--sqh-gray4);margin-top:5px">Source : Géorisques / BRGM — périmètre 1 km</div>`;
 }
 
+var _DEPT_REGION = {'01':['auvergne-rhone-alpes','ain'],'02':['hauts-de-france','aisne'],'03':['auvergne-rhone-alpes','allier'],'04':['provence-alpes-cote-dazur','alpes-de-haute-provence'],'05':['provence-alpes-cote-dazur','hautes-alpes'],'06':['provence-alpes-cote-dazur','alpes-maritimes'],'07':['auvergne-rhone-alpes','ardeche'],'08':['grand-est','ardennes'],'09':['occitanie','ariege'],'10':['grand-est','aube'],'11':['occitanie','aude'],'12':['occitanie','aveyron'],'13':['provence-alpes-cote-dazur','bouches-du-rhone'],'14':['normandie','calvados'],'15':['auvergne-rhone-alpes','cantal'],'16':['nouvelle-aquitaine','charente'],'17':['nouvelle-aquitaine','charente-maritime'],'18':['centre-val-de-loire','cher'],'19':['nouvelle-aquitaine','correze'],'21':['bourgogne-franche-comte','cote-dor'],'22':['bretagne','cotes-darmor'],'23':['nouvelle-aquitaine','creuse'],'24':['nouvelle-aquitaine','dordogne'],'25':['bourgogne-franche-comte','doubs'],'26':['auvergne-rhone-alpes','drome'],'27':['normandie','eure'],'28':['centre-val-de-loire','eure-et-loir'],'29':['bretagne','finistere'],'2A':['corse','corse-du-sud'],'2B':['corse','haute-corse'],'30':['occitanie','gard'],'31':['occitanie','haute-garonne'],'32':['occitanie','gers'],'33':['nouvelle-aquitaine','gironde'],'34':['occitanie','herault'],'35':['bretagne','ille-et-vilaine'],'36':['centre-val-de-loire','indre'],'37':['centre-val-de-loire','indre-et-loire'],'38':['auvergne-rhone-alpes','isere'],'39':['bourgogne-franche-comte','jura'],'40':['nouvelle-aquitaine','landes'],'41':['centre-val-de-loire','loir-et-cher'],'42':['auvergne-rhone-alpes','loire'],'43':['auvergne-rhone-alpes','haute-loire'],'44':['pays-de-la-loire','loire-atlantique'],'45':['centre-val-de-loire','loiret'],'46':['occitanie','lot'],'47':['nouvelle-aquitaine','lot-et-garonne'],'48':['occitanie','lozere'],'49':['pays-de-la-loire','maine-et-loire'],'50':['normandie','manche'],'51':['grand-est','marne'],'52':['grand-est','haute-marne'],'53':['pays-de-la-loire','mayenne'],'54':['grand-est','meurthe-et-moselle'],'55':['grand-est','meuse'],'56':['bretagne','morbihan'],'57':['grand-est','moselle'],'58':['bourgogne-franche-comte','nievre'],'59':['hauts-de-france','nord'],'60':['hauts-de-france','oise'],'61':['normandie','orne'],'62':['hauts-de-france','pas-de-calais'],'63':['auvergne-rhone-alpes','puy-de-dome'],'64':['nouvelle-aquitaine','pyrenees-atlantiques'],'65':['occitanie','hautes-pyrenees'],'66':['occitanie','pyrenees-orientales'],'67':['grand-est','bas-rhin'],'68':['grand-est','haut-rhin'],'69':['auvergne-rhone-alpes','rhone'],'70':['bourgogne-franche-comte','haute-saone'],'71':['bourgogne-franche-comte','saone-et-loire'],'72':['pays-de-la-loire','sarthe'],'73':['auvergne-rhone-alpes','savoie'],'74':['auvergne-rhone-alpes','haute-savoie'],'75':['ile-de-france','paris'],'76':['normandie','seine-maritime'],'77':['ile-de-france','seine-et-marne'],'78':['ile-de-france','yvelines'],'79':['nouvelle-aquitaine','deux-sevres'],'80':['hauts-de-france','somme'],'81':['occitanie','tarn'],'82':['occitanie','tarn-et-garonne'],'83':['provence-alpes-cote-dazur','var'],'84':['provence-alpes-cote-dazur','vaucluse'],'85':['pays-de-la-loire','vendee'],'86':['nouvelle-aquitaine','vienne'],'87':['nouvelle-aquitaine','haute-vienne'],'88':['grand-est','vosges'],'89':['bourgogne-franche-comte','yonne'],'90':['bourgogne-franche-comte','territoire-de-belfort'],'91':['ile-de-france','essonne'],'92':['ile-de-france','hauts-de-seine'],'93':['ile-de-france','seine-saint-denis'],'94':['ile-de-france','val-de-marne'],'95':['ile-de-france','val-doise']};
+
 // ─ Niveau 1 : Signal marché local ─
 function buildMarketSignal(b) {
   var dpe  = (b.dpe  || '').toUpperCase();
@@ -4153,9 +4180,19 @@ function buildDVFHTML(mutations, b) {
     }
     var exploreUrl = b.geo ? ('https://explore.data.gouv.fr/immobilier?lat='+lat+'&lng='+lon+'&zoom=17') : 'https://explore.data.gouv.fr/immobilier';
     var dvfUrl     = b.geo ? ('https://app.dvf.etalab.gouv.fr/?lon='+lon+'&lat='+lat+'&zoom=17') : 'https://app.dvf.etalab.gouv.fr/';
-    var villeSlug  = ville.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
-    var notaUrl    = villeSlug ? ('https://nota.immo/prix-immobilier/' + villeSlug) : 'https://nota.immo/';
-    var priceUrl   = insee ? ('https://www.price.immo/communes/' + insee + '/') : 'https://www.price.immo/';
+    var villeSlug  = ville.toLowerCase()
+      .replace(/\u0153/g,'oe').replace(/\u00e6/g,'ae')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/['\u2019\u02bc\u0060]/g,'')
+      .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    var deptCode   = insee ? insee.substring(0,2).toUpperCase() : (cp ? cp.substring(0,2) : '');
+    var deptInfo   = _DEPT_REGION[deptCode] || null;
+    var leprixUrl  = (deptInfo && villeSlug && cp)
+      ? ('https://www.lepriximmo.fr/prix-immobilier/' + deptInfo[0] + '/' + deptInfo[1] + '/' + villeSlug + '-' + cp + '/')
+      : 'https://www.lepriximmo.fr/';
+    var immoDataUrl= (villeSlug && insee)
+      ? ('https://www.immobilier-data.fr/prix-immobilier/' + villeSlug + '-' + insee)
+      : 'https://www.immobilier-data.fr/';
     var signal = buildMarketSignal(b);
     var html = '<div style="display:flex;flex-direction:column;gap:10px">';
     html += communeCard;
@@ -4170,8 +4207,8 @@ function buildDVFHTML(mutations, b) {
     html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--sqh-gray4);margin-bottom:5px">Prix au m² — ' + (ville || 'secteur') + '</div>';
     html += '<div style="font-size:11px;color:var(--sqh-gray5);background:var(--sqh-gray1);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.55">Prix médian, volumes et tendances sur 12 mois par commune.</div>';
     html += '<div style="display:flex;gap:7px;flex-wrap:wrap">';
-    html += '<a href="' + notaUrl  + '" target="_blank" class="btn btn-outline" style="font-size:11px">📈 nota.immo →</a>';
-    html += '<a href="' + priceUrl + '" target="_blank" class="btn btn-outline" style="font-size:11px">🏘️ price.immo →</a>';
+    html += '<a href="' + leprixUrl   + '" target="_blank" class="btn btn-outline" style="font-size:11px">📈 lepriximmo.fr →</a>';
+    html += '<a href="' + immoDataUrl + '" target="_blank" class="btn btn-outline" style="font-size:11px">📊 immobilier-data.fr →</a>';
     html += '</div></div>';
     if (signal) html += '<div style="border-left:3px solid ' + signal.color + ';background:var(--sqh-gray1);border-radius:0 6px 6px 0;padding:9px 12px;font-size:11px;color:var(--sqh-gray5);line-height:1.55"><strong style="display:block;color:var(--sqh-dark);margin-bottom:3px">' + signal.titre + '</strong>' + signal.texte + '</div>';
     html += '<div style="font-size:10px;color:var(--sqh-gray4);line-height:1.5;border-top:1px solid var(--sqh-gray2);padding-top:7px">Source : DGFiP — DVF+ · Données cadastrales · Millésime 2022–2024 · MAJ ∼2×/an</div>';
@@ -4279,27 +4316,35 @@ async function _renderMarcheTab(b) {
   const body  = document.getElementById('detail-body');
   const noGeo = `<div style="background:var(--sqh-gray1);border:1px solid var(--sqh-gray2);border-radius:8px;padding:10px 13px;font-size:11px;color:var(--sqh-gray4)">📍 Géolocalisez ce bien pour afficher les données.</div>`;
 
+  var ville     = b.villeFromAddr || (b.geo && b.geo.city) || '';
+  var isMaison  = !/appart/i.test(b.type || '');
+  var titreDvf  = ville
+    ? ('🏷️ Transactions — ' + ville + ' <span style="font-size:9px;font-weight:400;color:var(--sqh-gray4)">(' + (isMaison ? 'Maisons' : 'Appartements') + ' · source DVF)</span>')
+    : '🏷️ Transactions récentes <span style="font-size:9px;font-weight:400;color:var(--sqh-gray4)">(rayon 500–1 000 m · source DVF)</span>';
+  var wazeUrlM  = b.geo ? ('https://www.waze.com/ul?ll='+b.geo.lat+','+b.geo.lon+'&navigate=yes') : '#';
+  var mapsUrlM  = b.geo ? ('https://www.google.com/maps/search/?api=1&query='+b.geo.lat+','+b.geo.lon) : '#';
+  var explUrlM  = b.geo ? ('https://explore.data.gouv.fr/immobilier?lat='+b.geo.lat+'&lng='+b.geo.lon+'&zoom=17') : 'https://explore.data.gouv.fr/immobilier';
+  var dvfUrlM   = b.geo ? ('https://app.dvf.etalab.gouv.fr/?lon='+b.geo.lon+'&lat='+b.geo.lat+'&zoom=17') : 'https://app.dvf.etalab.gouv.fr/';
   body.innerHTML = `<div class="marche-body fadein">
     <div>
-      <div class="section-hd">🚨 Risques naturels &amp; technologiques</div>
-      <div id="marche-georisques">${b.geo ? `<div class="load-row"><span class="spin"></span>Chargement Géorisques…</div>` : noGeo}</div>
+      <div class="section-hd">📍 Navigation &amp; accès</div>
+      <div class="action-row" style="margin-bottom:4px">
+        <a href="${wazeUrlM}" target="_blank" class="btn btn-waze">🚗 Waze</a>
+        <a href="${mapsUrlM}" target="_blank" class="btn btn-maps">📍 Google Maps</a>
+        <a href="${dvfUrlM}" target="_blank" class="btn btn-outline">📊 DVF</a>
+        <a href="${explUrlM}" target="_blank" class="btn btn-outline">🏛️ data.gouv</a>
+      </div>
     </div>
     <div>
-      <div class="section-hd">🏷️ Transactions récentes <span style="font-size:9px;font-weight:400;color:var(--sqh-gray4)">(rayon 500–1 000 m · source DVF)</span></div>
-      <div id="marche-dvf">${b.geo ? `<div class="load-row"><span class="spin"></span>Chargement DVF…</div>` : noGeo}</div>
+      <div class="section-hd">${titreDvf}</div>
+      <div id="marche-dvf">${b.geo ? `<div class="load-row"><span class="spin"></span>Chargement…</div>` : noGeo}</div>
     </div>
   </div>`;
 
   if (!b.geo) return;
 
-  const [risques, mutations] = await Promise.all([
-    fetchGeorisques(b.geo.lat, b.geo.lon),
-    fetchDVF(b.geo.lat, b.geo.lon),
-  ]);
-
-  const gEl = document.getElementById('marche-georisques');
+  const mutations = await fetchDVF(b.geo.lat, b.geo.lon);
   const dEl = document.getElementById('marche-dvf');
-  if (gEl) gEl.innerHTML = buildGeorisquesHTML(risques);
   if (dEl) dEl.innerHTML = buildDVFHTML(mutations, b);
 }
 
