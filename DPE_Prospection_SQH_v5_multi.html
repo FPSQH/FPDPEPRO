@@ -2197,7 +2197,7 @@ function buildLetterContent(b) {
 
   return {
     today, ville, salut, signoff,
-    isAppt, dpeGroup, typeBien, Bien, contextSecteur,
+    isAppt, dpeGroup, dpe: b.dpe ? b.dpe.toUpperCase() : '?', typeBien, Bien, contextSecteur,
     introCtx, dpeText, infoboxColor, ademeItems,
     hasAudit, auditNAudit: hasAudit ? b.audit.nAudit : '', auditDateLabel, auditScenarios,
     ventePara, withGL, glPara: getGestionLocativeParagraph(b),
@@ -2225,9 +2225,10 @@ function generateLetter(b) {
   /* ── Encart Audit ── */
   let auditBlock = '';
   if (d.hasAudit) {
-    const scLines = d.auditScenarios.map(sc =>
+    const initialLine = `→ <strong>État initial</strong> : DPE <strong>${d.dpe}</strong>`;
+    const scLines = [initialLine, ...d.auditScenarios.map(sc =>
       `→ <strong>${sc.categorie || 'Scénario'}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
-    ).join('<br>');
+    )].join('<br>');
     auditBlock = `
     <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
     <p class="ltr-p">Un audit énergétique (n° <strong>${d.auditNAudit}</strong>${d.auditDateLabel}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :</p>
@@ -2396,7 +2397,7 @@ function printLetter() {
 
   <div class="lh-header">
     <div class="lh-brand">
-      <div class="lh-logo-img-wrap"><img src="data:image/jpeg;base64,${SQH_LOGO_BASE64}" alt="Square Habitat" style="height:42pt;width:auto;display:block"/></div>
+      <div class="lh-logo-img-wrap"><img src="data:image/jpeg;base64,${SQH_LOGO_BASE64}" alt="Square Habitat" style="height:59pt;width:auto;display:block"/></div>
       <div class="lh-name">
         <div class="sub">${agentInfo.agence || 'Square Habitat'}</div>
         ${agentInfo.adresseAgence ? `<div class="sub" style="font-size:7pt;color:#706F6F">${agentInfo.adresseAgence}</div>` : ''}
@@ -2447,9 +2448,8 @@ function letterToDocxParagraphs(b) {
   const TEAL = '009597', GREEN = '006A4E', RED = 'C0392B', DARK = '1A1A1A', GREY = '706F6F', BODY = '2a2a2a';
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
-  const run = (text, opts={}) => new TextRun({ text, font: 'Georgia', size: 22, color: BODY, ...opts });
+  const run = (text, opts={}) => new TextRun({ text, font: 'Georgia', size: 20, color: BODY, ...opts });
 
-  // Parse <strong> tags into bold TextRun segments
   const richRuns = (text, baseOpts={}) => {
     const runs = [];
     const parts = text.split(/(<strong>|<\/strong>)/);
@@ -2457,82 +2457,78 @@ function letterToDocxParagraphs(b) {
     for (const part of parts) {
       if (part === '<strong>') { bold = true; continue; }
       if (part === '</strong>') { bold = false; continue; }
-      if (part) runs.push(new TextRun({ text: part, font: 'Georgia', size: 22, color: BODY, bold, ...baseOpts }));
+      if (part) runs.push(new TextRun({ text: part, font: 'Georgia', size: 20, color: BODY, bold, ...baseOpts }));
     }
     return runs;
   };
 
   const bodyPara = (text, opts={}) => new Paragraph({
     children: richRuns(text),
-    spacing: { after: 140 },
+    spacing: { after: 100 },
+    alignment: AlignmentType.BOTH,
     ...opts,
   });
 
-  const emptyLine = (after=120) => new Paragraph({ children: [new TextRun('')], spacing: { after } });
+  const emptyLine = (after=80) => new Paragraph({ children: [new TextRun('')], spacing: { after } });
 
   const sectionTitle = (text) => new Paragraph({
-    children: [new TextRun({ text: text.toUpperCase(), bold: true, font: 'Arial', size: 19, color: TEAL })],
-    spacing: { before: 220, after: 100 },
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, font: 'Arial', size: 18, color: TEAL })],
+    spacing: { before: 160, after: 80 },
     border: { left: { style: BorderStyle.THICK, size: 20, color: TEAL, space: 8 } },
     indent: { left: 160 },
   });
 
-  // Colored info box — array of text lines
   const infoBox = (lines, color) => {
     const bgMap = { rouge: 'FDEDEB', teal: 'E8F6F6', green: 'EBF5EC' };
     const borderMap = { rouge: RED, teal: TEAL, green: GREEN };
     const bg = bgMap[color]; const bc = borderMap[color];
     return lines.map((line, i) => new Paragraph({
-      children: [new TextRun({ text: line, font: 'Arial', size: 19, color: DARK })],
+      children: [new TextRun({ text: line, font: 'Arial', size: 18, color: DARK })],
       shading: { type: ShadingType.CLEAR, fill: bg },
       border: { left: { style: BorderStyle.THICK, size: 20, color: bc, space: 8 } },
       indent: { left: 160 },
-      spacing: { after: i < lines.length - 1 ? 60 : 120 },
+      spacing: { after: i < lines.length - 1 ? 40 : 100 },
     }));
   };
 
   const paras = [];
 
-  // ── En-tête agence ───────────────────────────────────────────────────────────
+  // ── En-tête agence : 3 colonnes (logo | agence | agent) ─────────────────────
   const NO_BORDER = { style: BorderStyle.NIL };
   const noBorders = { top: NO_BORDER, bottom: NO_BORDER, left: NO_BORDER, right: NO_BORDER };
   const hdrBorderBottom = { style: BorderStyle.SINGLE, size: 12, color: '038B92' };
-
   const logoData = Uint8Array.from(atob(SQH_LOGO_BASE64), c => c.charCodeAt(0));
 
-  const leftCellChildren = [
+  const agencyChildren = [
     new Paragraph({
-      children: [
-        new ImageRun({ data: logoData, transformation: { width: 50, height: 50 }, type: 'jpg' }),
-        new TextRun({ text: '  ' + (agentInfo.agence || 'Square Habitat'), font: 'Arial', size: 20, bold: true, color: TEAL }),
-      ],
-      spacing: { after: 40 },
+      children: [new TextRun({ text: agentInfo.agence || 'Square Habitat', font: 'Arial', size: 20, bold: true, color: TEAL })],
+      spacing: { after: 30 },
     }),
     agentInfo.adresseAgence ? new Paragraph({
-      children: [new TextRun({ text: agentInfo.adresseAgence, font: 'Arial', size: 16, color: GREY })],
+      children: [new TextRun({ text: agentInfo.adresseAgence, font: 'Arial', size: 15, color: GREY })],
       spacing: { after: 20 },
     }) : null,
     agentInfo.telephone ? new Paragraph({
-      children: [new TextRun({ text: `📞 ${agentInfo.telephone}${agentInfo.telephoneFixe ? ' | ' + agentInfo.telephoneFixe : ''}`, font: 'Arial', size: 16, color: GREY })],
-      spacing: { after: 60 },
+      children: [new TextRun({ text: `📞 ${agentInfo.telephone}${agentInfo.telephoneFixe ? ' | ' + agentInfo.telephoneFixe : ''}`, font: 'Arial', size: 15, color: GREY })],
+      spacing: { after: 50 },
     }) : null,
   ].filter(Boolean);
 
-  const rightCellChildren = [
+  const agentChildren = [
     new Paragraph({
       alignment: AlignmentType.RIGHT,
       children: [new TextRun({ text: agentFullName(), font: 'Arial', size: 20, bold: true, color: DARK })],
-      spacing: { after: 40 },
+      spacing: { after: 30 },
     }),
     new Paragraph({
       alignment: AlignmentType.RIGHT,
-      children: [new TextRun({ text: 'Conseiller Commercial Immobilier', font: 'Arial', size: 16, color: GREY })],
+      children: [new TextRun({ text: 'Conseiller Commercial Immobilier', font: 'Arial', size: 15, color: GREY })],
       spacing: { after: 20 },
     }),
     agentInfo.email ? new Paragraph({
       alignment: AlignmentType.RIGHT,
-      children: [new TextRun({ text: `✉ ${agentInfo.email}`, font: 'Arial', size: 16, color: BODY })],
-      spacing: { after: 60 },
+      children: [new TextRun({ text: `✉ ${agentInfo.email}`, font: 'Arial', size: 15, color: BODY })],
+      spacing: { after: 50 },
     }) : null,
   ].filter(Boolean);
 
@@ -2540,41 +2536,51 @@ function letterToDocxParagraphs(b) {
     width: { size: 100, type: WidthType.PERCENTAGE },
     rows: [new TableRow({ children: [
       new TableCell({
-        width: { size: 60, type: WidthType.PERCENTAGE },
-        verticalAlign: VerticalAlign.TOP,
-        borders: { ...noBorders, bottom: hdrBorderBottom },
-        children: leftCellChildren,
-      }),
-      new TableCell({
-        width: { size: 40, type: WidthType.PERCENTAGE },
+        width: { size: 12, type: WidthType.PERCENTAGE },
         verticalAlign: VerticalAlign.CENTER,
         borders: { ...noBorders, bottom: hdrBorderBottom },
-        children: rightCellChildren,
+        children: [new Paragraph({
+          children: [new ImageRun({ data: logoData, transformation: { width: 70, height: 70 }, type: 'jpg' })],
+          spacing: { after: 0 },
+        })],
+      }),
+      new TableCell({
+        width: { size: 52, type: WidthType.PERCENTAGE },
+        verticalAlign: VerticalAlign.CENTER,
+        borders: { ...noBorders, bottom: hdrBorderBottom },
+        children: agencyChildren,
+      }),
+      new TableCell({
+        width: { size: 36, type: WidthType.PERCENTAGE },
+        verticalAlign: VerticalAlign.CENTER,
+        borders: { ...noBorders, bottom: hdrBorderBottom },
+        children: agentChildren,
       }),
     ]})],
   }));
-  paras.push(emptyLine(200));
+  paras.push(emptyLine(160));
 
   // ── Date ────────────────────────────────────────────────────────────────────
   paras.push(new Paragraph({
     children: [run(`${d.ville ? d.ville + ', le ' : 'Le '}${d.today}`)],
     alignment: AlignmentType.RIGHT,
-    spacing: { after: 340 },
+    spacing: { after: 240 },
   }));
 
   // ── Salutation ───────────────────────────────────────────────────────────────
   paras.push(new Paragraph({
     children: [run(d.salut, { italics: true })],
-    spacing: { after: 200 },
+    spacing: { after: 140 },
   }));
 
   // ── Intro + adresse inline ───────────────────────────────────────────────────
   paras.push(new Paragraph({
+    alignment: AlignmentType.BOTH,
     children: [
       run(`Je me permets de vous contacter au sujet de ${d.typeBien} situé : `),
-      new TextRun({ text: d.adresse, font: 'Georgia', size: 22, bold: true, color: DARK }),
+      new TextRun({ text: d.adresse, font: 'Georgia', size: 20, bold: true, color: DARK }),
     ],
-    spacing: { after: 180 },
+    spacing: { after: 120 },
   }));
 
   // ── Intro contextuelle ───────────────────────────────────────────────────────
@@ -2584,7 +2590,6 @@ function letterToDocxParagraphs(b) {
   paras.push(sectionTitle('Situation énergétique de votre bien'));
   paras.push(bodyPara(d.dpeText));
 
-  // Encart ADEME — emojis + regroupés par paires sur 2 lignes
   if (d.ademeItems.length) {
     const pairs = [];
     for (let i = 0; i < d.ademeItems.length; i += 2) {
@@ -2597,18 +2602,30 @@ function letterToDocxParagraphs(b) {
   if (d.hasAudit) {
     paras.push(sectionTitle('Audit énergétique & rénovation'));
     paras.push(bodyPara(`Un audit énergétique (n° ${d.auditNAudit}${d.auditDateLabel}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`));
+    // Ligne état initial
+    paras.push(new Paragraph({
+      children: [
+        new TextRun({ text: '→ ', font: 'Georgia', size: 20, color: TEAL, bold: true }),
+        new TextRun({ text: 'État initial', font: 'Georgia', size: 20, color: BODY, bold: true }),
+        new TextRun({ text: ' : DPE ', font: 'Georgia', size: 20, color: BODY }),
+        new TextRun({ text: d.dpe, font: 'Georgia', size: 20, color: BODY, bold: true }),
+      ],
+      indent: { left: 360 },
+      spacing: { after: 60 },
+    }));
+    // Scénarios de rénovation
     d.auditScenarios.forEach(sc => {
       paras.push(new Paragraph({
         children: [
-          new TextRun({ text: '→ ', font: 'Georgia', size: 22, color: TEAL, bold: true }),
-          new TextRun({ text: `${sc.categorie || 'Scénario'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
-          new TextRun({ text: ` : atteindre DPE `, font: 'Georgia', size: 22, color: BODY }),
-          new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Georgia', size: 22, color: BODY, bold: true }),
-          new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Georgia', size: 22, color: BODY }),
-          new TextRun({ text: `${sc.gainPct || sc.gainMin || '?'}%`, font: 'Georgia', size: 22, color: BODY, bold: true }),
+          new TextRun({ text: '→ ', font: 'Georgia', size: 20, color: TEAL, bold: true }),
+          new TextRun({ text: `${sc.categorie || 'Scénario'}`, font: 'Georgia', size: 20, color: BODY, bold: true }),
+          new TextRun({ text: ` : atteindre DPE `, font: 'Georgia', size: 20, color: BODY }),
+          new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Georgia', size: 20, color: BODY, bold: true }),
+          new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Georgia', size: 20, color: BODY }),
+          new TextRun({ text: `${sc.gainPct || sc.gainMin || '?'}%`, font: 'Georgia', size: 20, color: BODY, bold: true }),
         ],
         indent: { left: 360 },
-        spacing: { after: 80 },
+        spacing: { after: 60 },
       }));
     });
     paras.push(...infoBox([
@@ -2632,10 +2649,30 @@ function letterToDocxParagraphs(b) {
   }
 
   // ── Politesse ────────────────────────────────────────────────────────────────
-  paras.push(emptyLine(80));
-  paras.push(bodyPara(`Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous, sans aucun engagement de votre part.`));
   paras.push(emptyLine(60));
+  paras.push(bodyPara(`Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous, sans aucun engagement de votre part.`));
+  paras.push(emptyLine(40));
   paras.push(bodyPara(`Dans l'attente de votre retour, je vous adresse, ${d.signoff}, mes cordiales salutations.`));
+
+  // ── Signature ────────────────────────────────────────────────────────────────
+  paras.push(emptyLine(160));
+  paras.push(new Paragraph({
+    children: [new TextRun({ text: agentFullName(), font: 'Arial', size: 20, bold: true, color: DARK })],
+    spacing: { after: 40 },
+  }));
+  paras.push(new Paragraph({
+    children: [new TextRun({ text: `Conseiller Commercial Immobilier — ${agentInfo.agence}`, font: 'Arial', size: 18, color: GREY })],
+    spacing: { after: 40 },
+  }));
+  const sigTel = [agentInfo.telephone, agentInfo.telephoneFixe].filter(Boolean).join(' | ');
+  if (sigTel) paras.push(new Paragraph({
+    children: [new TextRun({ text: `📞 ${sigTel}`, font: 'Arial', size: 18, color: BODY })],
+    spacing: { after: 40 },
+  }));
+  if (agentInfo.email) paras.push(new Paragraph({
+    children: [new TextRun({ text: `✉ ${agentInfo.email}`, font: 'Arial', size: 18, color: BODY })],
+    spacing: { after: 0 },
+  }));
 
   return paras;
 }
@@ -2643,7 +2680,7 @@ function letterToDocxParagraphs(b) {
 async function buildDocxFromBiens(biensList) {
   const { Document, Packer } = docx;
   const sections = biensList.map(b => ({
-    properties: { page: { size:{ width:11906, height:16838 }, margin:{ top:1701, right:1418, bottom:1701, left:1418 } } },
+    properties: { page: { size:{ width:11906, height:16838 }, margin:{ top:567, right:1021, bottom:567, left:1021 } } },
     children: letterToDocxParagraphs(b),
   }));
   return await Packer.toBlob(new Document({ sections }));
