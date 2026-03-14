@@ -2219,14 +2219,14 @@ function generateLetter(b) {
     const parts = d.ademeItems.map(({emoji, label, value}) => `${emoji} ${label} : <strong>${value}</strong>`);
     const adLine1 = [parts[0], parts[2]].filter(Boolean).join(' &nbsp;·&nbsp; ');
     const adLine2 = [parts[1], parts[3]].filter(Boolean).join(' &nbsp;·&nbsp; ');
-    dpeBox = `<div class="ltr-infobox ltr-infobox--${d.infoboxColor}">${adLine1}${adLine2 ? '<br>' + adLine2 : ''}</div>`;
+    dpeBox = `<div class="ltr-infobox ltr-infobox--${d.infoboxColor}" style="text-align:center">${adLine1}${adLine2 ? '<br>' + adLine2 : ''}</div>`;
   }
 
   /* ── Encart Audit ── */
   let auditBlock = '';
   if (d.hasAudit) {
     const scLines = d.auditScenarios.map(sc =>
-      `→ <strong>${(sc.categorie || 'Scénario').replace(/principale?/gi, '').trim()}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
+      `→ <strong>${(sc.categorie || 'Scénario').replace(/principale?/gi, '').replace(/[\u0022\u201C\u201D\u00AB\u00BB]/g, '').trim()}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
     ).join('<br>');
     auditBlock = `
     <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
@@ -2483,6 +2483,7 @@ function letterToDocxParagraphs(b) {
     const bg = bgMap[color]; const bc = borderMap[color];
     return lines.map((line, i) => new Paragraph({
       children: [new TextRun({ text: line, font: 'Arial', size: 18, color: DARK })],
+      alignment: AlignmentType.CENTER,
       shading: { type: ShadingType.CLEAR, fill: bg },
       border: { left: { style: BorderStyle.THICK, size: 20, color: bc, space: 8 } },
       indent: { left: 160 },
@@ -2606,7 +2607,7 @@ function letterToDocxParagraphs(b) {
       paras.push(new Paragraph({
         children: [
           new TextRun({ text: '→ ', font: 'Arial', size: 20, color: TEAL, bold: true }),
-          new TextRun({ text: `${(sc.categorie || 'Scénario').replace(/principale?/gi, '').trim()}`, font: 'Arial', size: 20, color: BODY, bold: true }),
+          new TextRun({ text: `${(sc.categorie || 'Scénario').replace(/principale?/gi, '').replace(/["“”«»]/g, '').trim()}`, font: 'Arial', size: 20, color: BODY, bold: true }),
           new TextRun({ text: ` : atteindre DPE `, font: 'Arial', size: 20, color: BODY }),
           new TextRun({ text: `${sc.classeApres || '?'}`, font: 'Arial', size: 20, color: BODY, bold: true }),
           new TextRun({ text: ` pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : `, font: 'Arial', size: 20, color: BODY }),
