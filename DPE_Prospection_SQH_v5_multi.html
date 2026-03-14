@@ -2144,22 +2144,7 @@ function mentionGestionLocative(b) {
   return false;
 }
 
-function getDpeBodyParagraph(b) {
-  const { isAppt, dpeGroup } = getLetterModel(b);
-  const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
-  const bien = isAppt ? 'votre appartement' : 'votre bien';
-  if (dpeGroup==='FG') return `${Bien} est classé DPE ${b.dpe}, ce qui le place dans la catégorie des logements à forte consommation énergétique — communément appelés "passoires thermiques". Depuis le 1er janvier ${b.dpe==='G'?'2023':'2025'}, ce type de logement ne peut plus être mis en location. Face à cette contrainte réglementaire, de nombreux propriétaires font le choix de céder leur bien dans de bonnes conditions, avant que les obligations de rénovation ne se renforcent davantage.`;
-  if (dpeGroup==='E') return `${Bien} est classé DPE E. Depuis 2023, les loyers de ce type de logement sont gelés : il n'est plus possible de les réviser à la hausse, ni lors d'un renouvellement de bail, ni entre deux locataires. De plus, à horizon 2034, ces biens seront soumis aux mêmes restrictions que les classes F et G. Il peut donc être judicieux d'évaluer vos options dès maintenant.`;
-  if (dpeGroup==='CD') return `${Bien} est classé DPE ${b.dpe}. Bien que cette classe ne soit pas encore soumise à des restrictions immédiates, le contexte réglementaire évolue rapidement. Le marché immobilier local est actuellement dynamique, et c'est souvent dans ces périodes favorables que se réalisent les meilleures transactions.`;
-  return `${Bien} est classé DPE ${b.dpe}, ce qui constitue un vrai atout sur le marché actuel. Les acheteurs sont de plus en plus sensibles aux performances énergétiques, et un bon classement DPE valorise significativement ${bien} lors d'une mise en vente ou d'une mise en location.`;
-}
-
-function getGestionLocativeParagraph(b) {
-  if (/appart/i.test(b.type)) return `Par ailleurs, si vous souhaitez conserver votre bien tout en vous libérant des contraintes de la gestion, sachez que notre agence propose également un service de gestion locative complète : recherche de locataires, encaissement des loyers et suivi quotidien de votre bien.`;
-  return `Si la vente ne correspond pas à votre projet immédiat, notre agence propose également un service de gestion locative : prise en charge intégrale de la gestion, de la recherche de locataires à la perception des loyers, pour valoriser votre patrimoine sereinement.`;
-}
-
-function generateLetter(b) {
+function buildLetterContent(b) {
   const today = new Date().toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
   const ville = getCityForLetter(b);
   const salut = getSalutation(b, false);
@@ -2167,16 +2152,14 @@ function generateLetter(b) {
   const withGL = mentionGestionLocative(b);
   const { isAppt, dpeGroup } = getLetterModel(b);
   const typeBien = isAppt ? 'votre appartement' : 'votre bien';
+  const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
   const secteurLabel = b.secteur ? ` (secteur ${b.secteur})` : '';
   const contextSecteur = ville ? `sur le secteur de ${ville}${secteurLabel}` : 'dans notre secteur';
 
-  /* ── Intro contextuelle ── */
   const introCtx = dpeGroup==='AB'
     ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
     : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
 
-  /* ── Paragraphe DPE enrichi ── */
-  const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
   let dpeText = '';
   if (dpeGroup==='FG') {
     dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui le place dans la catégorie des logements à forte consommation énergétique — communément appelés « passoires thermiques ». Depuis le 1er janvier ${b.dpe==='G'?'2023':'2025'}, ce type de logement ne peut plus être mis en location. Face à cette contrainte réglementaire, de nombreux propriétaires font le choix de céder leur bien dans de bonnes conditions, avant que les obligations de rénovation ne se renforcent davantage.`;
@@ -2188,36 +2171,19 @@ function generateLetter(b) {
     dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui constitue un vrai atout sur le marché actuel. Les acheteurs sont de plus en plus sensibles aux performances énergétiques, et un bon classement DPE valorise significativement ${typeBien} lors d'une mise en vente ou d'une mise en location.`;
   }
 
-  /* ── Encart DPE ── */
   const infoboxColor = (dpeGroup==='FG'||dpeGroup==='E') ? 'rouge' : 'teal';
-  let dpeBox = '';
+  const ademeItems = [];
   if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
-    const parts = [];
-    if (b.ademe.conso_ep_m2) parts.push(`⚡ Consommation : <strong>${b.ademe.conso_ep_m2} kWhep/m²/an</strong>`);
-    if (b.ademe.cout_annuel) parts.push(`💶 Coût annuel estimé : <strong>${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €</strong>`);
-    if (b.ademe.energie) parts.push(`🔥 Énergie principale : <strong>${b.ademe.energie}</strong>`);
-    if (b.ademe.ges_m2) parts.push(`🌿 GES : <strong>${b.ademe.ges_m2} kgeqCO₂/m²/an</strong>`);
-    dpeBox = `<div class="ltr-infobox ltr-infobox--${infoboxColor}">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+    if (b.ademe.conso_ep_m2) ademeItems.push({ emoji:'⚡', label:'Consommation', value:`${b.ademe.conso_ep_m2} kWhep/m²/an` });
+    if (b.ademe.cout_annuel)  ademeItems.push({ emoji:'💶', label:'Coût annuel estimé', value:`${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €` });
+    if (b.ademe.energie)      ademeItems.push({ emoji:'🔥', label:'Énergie principale', value:`${b.ademe.energie}` });
+    if (b.ademe.ges_m2)       ademeItems.push({ emoji:'🌿', label:'GES', value:`${b.ademe.ges_m2} kgeqCO₂/m²/an` });
   }
 
-  /* ── Encart Audit ── */
-  let auditBlock = '';
-  if (b.audit && b.audit.nAudit) {
-    const scLines = (b.audit.scenarios || []).slice(0, 3).map(sc =>
-      `→ <strong>${sc.categorie || 'Scénario'}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
-    ).join('<br>');
-    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
-    auditBlock = `
-    <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
-    <p class="ltr-p">Un audit énergétique (n° <strong>${b.audit.nAudit}</strong>${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :</p>
-    <div class="ltr-infobox ltr-infobox--green">
-      ${scLines}
-      <br><br>En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.<br>
-      🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a>
-    </div>`;
-  }
+  const hasAudit = !!(b.audit && b.audit.nAudit);
+  const auditDateLabel = (b.audit && b.audit.dateAudit) ? ` réalisé le ${b.audit.dateAudit}` : '';
+  const auditScenarios = hasAudit ? (b.audit.scenarios || []).slice(0, 3) : [];
 
-  /* ── Paragraphe vente enrichi ── */
   let ventePara = '';
   if (dpeGroup==='FG' || dpeGroup==='E') {
     ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
@@ -2227,33 +2193,74 @@ function generateLetter(b) {
     ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
   }
 
+  return {
+    today, ville, salut, signoff,
+    isAppt, dpeGroup, typeBien, Bien, contextSecteur,
+    introCtx, dpeText, infoboxColor, ademeItems,
+    hasAudit, auditNAudit: hasAudit ? b.audit.nAudit : '', auditDateLabel, auditScenarios,
+    ventePara, withGL, glPara: getGestionLocativeParagraph(b),
+    adresse: b.adresse,
+  };
+}
+
+function getGestionLocativeParagraph(b) {
+  if (/appart/i.test(b.type)) return `Par ailleurs, si vous souhaitez conserver votre bien tout en vous libérant des contraintes de la gestion, sachez que notre agence propose également un service de gestion locative complète : recherche de locataires, encaissement des loyers et suivi quotidien de votre bien.`;
+  return `Si la vente ne correspond pas à votre projet immédiat, notre agence propose également un service de gestion locative : prise en charge intégrale de la gestion, de la recherche de locataires à la perception des loyers, pour valoriser votre patrimoine sereinement.`;
+}
+
+function generateLetter(b) {
+  const d = buildLetterContent(b);
+
+  /* ── Encart DPE ── */
+  let dpeBox = '';
+  if (d.ademeItems.length) {
+    const parts = d.ademeItems.map(({emoji, label, value}) => `${emoji} ${label} : <strong>${value}</strong>`);
+    dpeBox = `<div class="ltr-infobox ltr-infobox--${d.infoboxColor}">${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+  }
+
+  /* ── Encart Audit ── */
+  let auditBlock = '';
+  if (d.hasAudit) {
+    const scLines = d.auditScenarios.map(sc =>
+      `→ <strong>${sc.categorie || 'Scénario'}</strong> : atteindre DPE <strong>${sc.classeApres || '?'}</strong> pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : <strong>${sc.gainPct || sc.gainMin || '?'}%</strong>`
+    ).join('<br>');
+    auditBlock = `
+    <div class="ltr-section-title">Audit énergétique &amp; rénovation</div>
+    <p class="ltr-p">Un audit énergétique (n° <strong>${d.auditNAudit}</strong>${d.auditDateLabel}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :</p>
+    <div class="ltr-infobox ltr-infobox--green">
+      ${scLines}
+      <br><br>En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.<br>
+      🔗 <a href="https://j-ecorenove.credit-agricole.fr" target="_blank" style="color:#006A4E">j-ecorenove.credit-agricole.fr</a>
+    </div>`;
+  }
+
   /* ── Gestion locative ── */
-  const glBlock = withGL ? `<div class="ltr-section-title">Notre service de gestion locative</div><p class="ltr-p">${getGestionLocativeParagraph(b)}</p>` : '';
+  const glBlock = d.withGL ? `<div class="ltr-section-title">Notre service de gestion locative</div><p class="ltr-p">${d.glPara}</p>` : '';
 
-  return `<p class="ltr-date">${ville ? ville + ', le ' : 'Le '}${today}</p>
+  return `<p class="ltr-date">${d.ville ? d.ville + ', le ' : 'Le '}${d.today}</p>
 
-<p class="ltr-salut">${salut}</p>
+<p class="ltr-salut">${d.salut}</p>
 
-<p class="ltr-p">Je me permets de vous contacter au sujet de ${typeBien} situé :</p>
-<p class="ltr-addr">${b.adresse}</p>
+<p class="ltr-p">Je me permets de vous contacter au sujet de ${d.typeBien} situé :</p>
+<p class="ltr-addr">${d.adresse}</p>
 
-<p class="ltr-p">${introCtx}</p>
+<p class="ltr-p">${d.introCtx}</p>
 
 <div class="ltr-section-title">Situation énergétique de votre bien</div>
-<p class="ltr-p">${dpeText}</p>
+<p class="ltr-p">${d.dpeText}</p>
 ${dpeBox}
 ${auditBlock}
 
 <div class="ltr-section-title">Estimation gratuite de votre bien</div>
-<p class="ltr-p">Pour vous accompagner dans votre réflexion, je vous propose de réaliser une <strong>estimation gratuite et sans engagement</strong> de ${typeBien}. Cette estimation, établie à partir des ventes récentes de biens comparables dans votre secteur, vous donnera une vision claire de la valeur actuelle de votre propriété sur le marché.</p>
+<p class="ltr-p">Pour vous accompagner dans votre réflexion, je vous propose de réaliser une <strong>estimation gratuite et sans engagement</strong> de ${d.typeBien}. Cette estimation, établie à partir des ventes récentes de biens comparables dans votre secteur, vous donnera une vision claire de la valeur actuelle de votre propriété sur le marché.</p>
 
 <div class="ltr-section-title">Vous envisagez de vendre ?</div>
-<p class="ltr-p">${ventePara}</p>
+<p class="ltr-p">${d.ventePara}</p>
 ${glBlock}
 
 <p class="ltr-p">Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous à votre convenance, sans aucun engagement de votre part.</p>
 
-<p class="ltr-p">Dans l'attente de votre retour, je vous adresse, ${signoff}, mes cordiales salutations.</p>
+<p class="ltr-p">Dans l'attente de votre retour, je vous adresse, ${d.signoff}, mes cordiales salutations.</p>
 
 <p class="ltr-signature"><strong>${agentFullName()}</strong><br>
 Conseiller Commercial Immobilier — ${agentInfo.agence}<br>
@@ -2464,102 +2471,11 @@ function copyLetter() {
   });
 }
 
-// ── Word export ────────────────────────────────────────────────────────────────
-function getLetterLines(b, today) {
-  const ville = getCityForLetter(b);
-  const salut = getSalutation(b, false);
-  const signoff = getSalutation(b, true);
-  const withGL = mentionGestionLocative(b);
-  const { isAppt, dpeGroup } = getLetterModel(b);
-  const typeBien = isAppt ? 'votre appartement' : 'votre bien';
-  const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
-  const secteurLabel = b.secteur ? ` (secteur ${b.secteur})` : '';
-  const contextSecteur = ville ? `sur le secteur de ${ville}${secteurLabel}` : 'dans notre secteur';
 
-  // Intro contextuelle
-  const introCtx = dpeGroup==='AB'
-    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
-    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
-
-  // Paragraphe DPE enrichi (texte brut pour Word)
-  let dpeText = '';
-  if (dpeGroup==='FG') {
-    dpeText = `${Bien} est classé DPE ${b.dpe}, ce qui le place dans la catégorie des logements à forte consommation énergétique — communément appelés « passoires thermiques ». Depuis le 1er janvier ${b.dpe==='G'?'2023':'2025'}, ce type de logement ne peut plus être mis en location. Face à cette contrainte réglementaire, de nombreux propriétaires font le choix de céder leur bien dans de bonnes conditions, avant que les obligations de rénovation ne se renforcent davantage.`;
-  } else if (dpeGroup==='E') {
-    dpeText = `${Bien} est classé DPE E. Depuis 2023, les loyers de ce type de logement sont gelés : il n'est plus possible de les réviser à la hausse, ni lors d'un renouvellement de bail, ni entre deux locataires. De plus, à horizon 2034, ces biens seront soumis aux mêmes restrictions que les classes F et G. Il peut donc être judicieux d'évaluer vos options dès maintenant.`;
-  } else if (dpeGroup==='CD') {
-    dpeText = `${Bien} est classé DPE ${b.dpe}. Bien que cette classe ne soit pas encore soumise à des restrictions immédiates, le contexte réglementaire évolue rapidement. Le marché immobilier local est actuellement dynamique, et c'est souvent dans ces périodes favorables que se réalisent les meilleures transactions.`;
-  } else {
-    dpeText = `${Bien} est classé DPE ${b.dpe}, ce qui constitue un vrai atout sur le marché actuel. Les acheteurs sont de plus en plus sensibles aux performances énergétiques, et un bon classement DPE valorise significativement ${typeBien} lors d'une mise en vente ou d'une mise en location.`;
-  }
-
-  // Données ADEME si disponibles
-  let dpeBoxLines = [];
-  if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
-    if (b.ademe.conso_ep_m2) dpeBoxLines.push(`Consommation : ${b.ademe.conso_ep_m2} kWhep/m²/an`);
-    if (b.ademe.cout_annuel) dpeBoxLines.push(`Coût annuel estimé : ${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €`);
-    if (b.ademe.energie) dpeBoxLines.push(`Énergie principale : ${b.ademe.energie}`);
-    if (b.ademe.ges_m2) dpeBoxLines.push(`GES : ${b.ademe.ges_m2} kgeqCO₂/m²/an`);
-  }
-
-  // Audit
-  let auditLines = [];
-  if (b.audit && b.audit.nAudit) {
-    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
-    auditLines.push(`[AUDIT ÉNERGÉTIQUE & RÉNOVATION]`);
-    auditLines.push(`Un audit énergétique (n° ${b.audit.nAudit}${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`);
-    (b.audit.scenarios || []).slice(0, 3).forEach(sc => {
-      auditLines.push(`→ ${sc.categorie || 'Scénario'} : atteindre DPE ${sc.classeApres || '?'} pour ~${Number(sc.cout||0).toLocaleString('fr-FR')} € de travaux — gain estimé : ${sc.gainPct || sc.gainMin || '?'}%`);
-    });
-    auditLines.push(`En tant que filiale du Groupe Crédit Agricole, nous pouvons vous accompagner dans la réflexion sur le financement de votre projet de rénovation.`);
-    auditLines.push(`Lien : j-ecorenove.credit-agricole.fr`);
-  }
-
-  // Paragraphe vente enrichi
-  let ventePara = '';
-  if (dpeGroup==='FG' || dpeGroup==='E') {
-    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
-  } else if (dpeGroup==='CD') {
-    ventePara = `Si vous envisagez de vendre ${typeBien}, votre DPE ${b.dpe} est un atout supplémentaire : les acheteurs sont de plus en plus sensibles aux performances énergétiques. Je serais ravi de vous accompagner et de vous proposer les meilleures conditions de vente.`;
-  } else {
-    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
-  }
-
-  const lines = [
-    `${ville ? ville + ', le ' : 'Le '}${today}`, '', '', salut, '',
-    `Je me permets de vous contacter au sujet de ${typeBien} situé :`, '',
-    `__ADDR__${b.adresse}`, '', introCtx, '',
-    '[SITUATION ÉNERGÉTIQUE DE VOTRE BIEN]', dpeText,
-  ];
-  if (dpeBoxLines.length) { lines.push(''); lines.push(...dpeBoxLines); }
-  if (auditLines.length) { lines.push(''); lines.push(...auditLines); }
-  lines.push('', '[ESTIMATION GRATUITE DE VOTRE BIEN]',
-    `Pour vous accompagner dans votre réflexion, je vous propose de réaliser une estimation gratuite et sans engagement de ${typeBien}. Cette estimation, établie à partir des ventes récentes de biens comparables dans votre secteur, vous donnera une vision claire de la valeur actuelle de votre propriété sur le marché.`
-  );
-  lines.push('', '[VOUS ENVISAGEZ DE VENDRE ?]', ventePara);
-  if (withGL) lines.push('', '[NOTRE SERVICE DE GESTION LOCATIVE]', getGestionLocativeParagraph(b));
-  lines.push('',
-    `Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous, sans aucun engagement de votre part.`, '',
-    `Dans l'attente de votre retour, je vous adresse, ${signoff}, mes cordiales salutations.`, '', '',
-    agentFullName(), `Conseiller Commercial Immobilier — ${agentInfo.agence}`,
-    `Tél. : ${agentInfo.telephone}${agentInfo.telephoneFixe ? ' | Fixe : ' + agentInfo.telephoneFixe : ''}`,
-    `Email : ${agentInfo.email}`
-  );
-  return lines;
-}
 
 function letterToDocxParagraphs(b) {
   const { Paragraph, TextRun, AlignmentType, PageBreak, BorderStyle, ShadingType } = docx;
-  const today = new Date().toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
-  const ville = getCityForLetter(b);
-  const salut = getSalutation(b, false);
-  const signoff = getSalutation(b, true);
-  const withGL = mentionGestionLocative(b);
-  const { isAppt, dpeGroup } = getLetterModel(b);
-  const typeBien = isAppt ? 'votre appartement' : 'votre bien';
-  const Bien = isAppt ? 'Votre appartement' : 'Votre bien';
-  const secteurLabel = b.secteur ? ` (secteur ${b.secteur})` : '';
-  const contextSecteur = ville ? `sur le secteur de ${ville}${secteurLabel}` : 'dans notre secteur';
+  const d = buildLetterContent(b);
 
   const TEAL = '009597', GREEN = '006A4E', RED = 'C0392B', DARK = '1A1A1A', GREY = '706F6F', BODY = '2a2a2a';
 
@@ -2612,25 +2528,25 @@ function letterToDocxParagraphs(b) {
 
   // ── Date ────────────────────────────────────────────────────────────────────
   paras.push(new Paragraph({
-    children: [run(`${ville ? ville + ', le ' : 'Le '}${today}`)],
+    children: [run(`${d.ville ? d.ville + ', le ' : 'Le '}${d.today}`)],
     alignment: AlignmentType.RIGHT,
     spacing: { after: 340 },
   }));
 
   // ── Salutation ───────────────────────────────────────────────────────────────
   paras.push(new Paragraph({
-    children: [run(salut, { italics: true })],
+    children: [run(d.salut, { italics: true })],
     spacing: { after: 200 },
   }));
 
   // ── Intro + adresse ──────────────────────────────────────────────────────────
   paras.push(new Paragraph({
-    children: [run(`Je me permets de vous contacter au sujet de ${typeBien} situé :`)],
+    children: [run(`Je me permets de vous contacter au sujet de ${d.typeBien} situé :`)],
     spacing: { after: 100 },
   }));
 
   paras.push(new Paragraph({
-    children: [new TextRun({ text: b.adresse, font: 'Georgia', size: 22, bold: true, color: DARK })],
+    children: [new TextRun({ text: d.adresse, font: 'Georgia', size: 22, bold: true, color: DARK })],
     alignment: AlignmentType.CENTER,
     shading: { type: ShadingType.CLEAR, fill: 'F5F5F5' },
     border: {
@@ -2643,43 +2559,23 @@ function letterToDocxParagraphs(b) {
   }));
 
   // ── Intro contextuelle ───────────────────────────────────────────────────────
-  const introCtx = dpeGroup==='AB'
-    ? `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux opportunités du marché ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`
-    : `Dans le cadre de mon activité de conseiller immobilier local, je suis attentif aux évolutions réglementaires qui concernent les propriétaires ${contextSecteur}. J'ai pris connaissance du diagnostic de performance énergétique récemment réalisé pour ${typeBien}, et je souhaitais vous contacter directement.`;
-  paras.push(bodyPara(introCtx));
+  paras.push(bodyPara(d.introCtx));
 
   // ── Section DPE ──────────────────────────────────────────────────────────────
   paras.push(sectionTitle('Situation énergétique de votre bien'));
-
-  let dpeText = '';
-  if (dpeGroup==='FG') {
-    dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui le place dans la catégorie des logements à forte consommation énergétique — communément appelés « passoires thermiques ». Depuis le 1er janvier ${b.dpe==='G'?'2023':'2025'}, ce type de logement ne peut plus être mis en location. Face à cette contrainte réglementaire, de nombreux propriétaires font le choix de céder leur bien dans de bonnes conditions, avant que les obligations de rénovation ne se renforcent davantage.`;
-  } else if (dpeGroup==='E') {
-    dpeText = `${Bien} est classé <strong>DPE E</strong>. Depuis 2023, les loyers de ce type de logement sont gelés : il n'est plus possible de les réviser à la hausse, ni lors d'un renouvellement de bail, ni entre deux locataires. De plus, à horizon 2034, ces biens seront soumis aux mêmes restrictions que les classes F et G. Il peut donc être judicieux d'évaluer vos options dès maintenant.`;
-  } else if (dpeGroup==='CD') {
-    dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>. Bien que cette classe ne soit pas encore soumise à des restrictions immédiates, le contexte réglementaire évolue rapidement. Le marché immobilier local est actuellement dynamique, et c'est souvent dans ces périodes favorables que se réalisent les meilleures transactions.`;
-  } else {
-    dpeText = `${Bien} est classé <strong>DPE ${b.dpe}</strong>, ce qui constitue un vrai atout sur le marché actuel. Les acheteurs sont de plus en plus sensibles aux performances énergétiques, et un bon classement DPE valorise significativement ${typeBien} lors d'une mise en vente ou d'une mise en location.`;
-  }
-  paras.push(bodyPara(dpeText));
+  paras.push(bodyPara(d.dpeText));
 
   // Encart ADEME
-  const infoboxColor = (dpeGroup==='FG'||dpeGroup==='E') ? 'rouge' : 'teal';
-  if (b.ademe && (b.ademe.conso_ep_m2 || b.ademe.cout_annuel || b.ademe.energie)) {
-    const dpeBoxLines = [];
-    if (b.ademe.conso_ep_m2) dpeBoxLines.push(`Consommation : ${b.ademe.conso_ep_m2} kWhep/m²/an`);
-    if (b.ademe.cout_annuel) dpeBoxLines.push(`Coût annuel estimé : ${Number(b.ademe.cout_annuel).toLocaleString('fr-FR')} €`);
-    if (b.ademe.energie) dpeBoxLines.push(`Énergie principale : ${b.ademe.energie}`);
-    if (b.ademe.ges_m2) dpeBoxLines.push(`GES : ${b.ademe.ges_m2} kgeqCO₂/m²/an`);
-    paras.push(...infoBox(dpeBoxLines, infoboxColor));
+  if (d.ademeItems.length) {
+    const dpeBoxLines = d.ademeItems.map(({label, value}) => `${label} : ${value}`);
+    paras.push(...infoBox(dpeBoxLines, d.infoboxColor));
   }
 
   // ── Section Audit ────────────────────────────────────────────────────────────
-  if (b.audit && b.audit.nAudit) {
+  if (d.hasAudit) {
     paras.push(sectionTitle('Audit énergétique & rénovation'));
-    const dateAudit = b.audit.dateAudit ? ` réalisé le ${b.audit.dateAudit}` : '';
-    paras.push(bodyPara(`Un audit énergétique (n° ${b.audit.nAudit}${dateAudit}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`));
-    (b.audit.scenarios || []).slice(0, 3).forEach(sc => {
+    paras.push(bodyPara(`Un audit énergétique (n° ${d.auditNAudit}${d.auditDateLabel}) a été réalisé pour ce bien. Il identifie plusieurs scénarios de rénovation :`));
+    d.auditScenarios.forEach(sc => {
       paras.push(new Paragraph({
         children: [
           new TextRun({ text: '→ ', font: 'Georgia', size: 22, color: TEAL, bold: true }),
@@ -2701,31 +2597,23 @@ function letterToDocxParagraphs(b) {
 
   // ── Section Estimation ───────────────────────────────────────────────────────
   paras.push(sectionTitle('Estimation gratuite de votre bien'));
-  paras.push(bodyPara(`Pour vous accompagner dans votre réflexion, je vous propose de réaliser une estimation gratuite et sans engagement de ${typeBien}. Cette estimation, établie à partir des ventes récentes de biens comparables dans votre secteur, vous donnera une vision claire de la valeur actuelle de votre propriété sur le marché.`));
+  paras.push(bodyPara(`Pour vous accompagner dans votre réflexion, je vous propose de réaliser une estimation gratuite et sans engagement de ${d.typeBien}. Cette estimation, établie à partir des ventes récentes de biens comparables dans votre secteur, vous donnera une vision claire de la valeur actuelle de votre propriété sur le marché.`));
 
   // ── Section Vente ────────────────────────────────────────────────────────────
-  let ventePara = '';
-  if (dpeGroup==='FG' || dpeGroup==='E') {
-    ventePara = `Un DPE ${b.dpe} n'est pas une fatalité pour vendre : de nombreux acheteurs cherchent précisément ce type de bien pour son potentiel de rénovation et son prix attractif. Mon expertise du marché local me permettrait de valoriser ${typeBien} auprès des bons profils d'acheteurs, dans les meilleures conditions.`;
-  } else if (dpeGroup==='CD') {
-    ventePara = `Si vous envisagez de vendre ${typeBien}, votre DPE ${b.dpe} est un atout supplémentaire : les acheteurs sont de plus en plus sensibles aux performances énergétiques. Je serais ravi de vous accompagner et de vous proposer les meilleures conditions de vente.`;
-  } else {
-    ventePara = `Votre DPE ${b.dpe} est un argument de vente de premier ordre. Si vous envisagez de mettre ${typeBien} sur le marché, je vous aiderai à le valoriser pleinement auprès des acheteurs les plus exigeants.`;
-  }
   paras.push(sectionTitle('Vous envisagez de vendre ?'));
-  paras.push(bodyPara(ventePara));
+  paras.push(bodyPara(d.ventePara));
 
   // ── Section Gestion locative ─────────────────────────────────────────────────
-  if (withGL) {
+  if (d.withGL) {
     paras.push(sectionTitle('Notre service de gestion locative'));
-    paras.push(bodyPara(getGestionLocativeParagraph(b)));
+    paras.push(bodyPara(d.glPara));
   }
 
   // ── Politesse ────────────────────────────────────────────────────────────────
   paras.push(emptyLine(80));
   paras.push(bodyPara(`Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous, sans aucun engagement de votre part.`));
   paras.push(emptyLine(60));
-  paras.push(bodyPara(`Dans l'attente de votre retour, je vous adresse, ${signoff}, mes cordiales salutations.`));
+  paras.push(bodyPara(`Dans l'attente de votre retour, je vous adresse, ${d.signoff}, mes cordiales salutations.`));
 
   // ── Signature ────────────────────────────────────────────────────────────────
   paras.push(emptyLine(200));
