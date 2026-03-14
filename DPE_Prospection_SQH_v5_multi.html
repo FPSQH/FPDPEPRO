@@ -4777,8 +4777,9 @@ function showSessionToast(msg) {
           <span style="font-size:12px;font-weight:600;color:var(--sqh-gray4);white-space:nowrap">@squarehabitat.fr</span>
         </div>
       </div>
-      <div style="display:flex;justify-content:flex-end;padding-top:4px">
-        <button class="btn btn-green" onclick="closeProfileModal()">✓ Enregistrer</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-top:4px">
+        <span id="profile-saved-msg" style="font-size:11px;color:var(--sqh-green);font-weight:600;opacity:0;transition:opacity .4s">✓ Sauvegardé</span>
+        <button class="btn btn-green" onclick="closeProfileModal()">✓ Fermer</button>
       </div>
     </div>
   </div>
@@ -5056,7 +5057,7 @@ async function onLoginSuccess(user, isNewLogin) {
   const shortEmail = (user.email || '').split('@')[0];
   const el = document.getElementById('topbar-user');
   if (el) el.textContent = '👤 ' + shortEmail;
-  await loadUserProfile(user.id);
+  await loadUserProfile(user);
   if (isNewLogin) await restoreSuivisFromCloud();
 }
 
@@ -5082,36 +5083,62 @@ async function handleLogout() {
 }
 
 // ── Profil agent ──────────────────────────────────────────────────
-async function loadUserProfile(userId) {
+async function loadUserProfile(user) {
+  // 1. Lecture immédiate depuis user_metadata (disponible sans requête DB)
+  const m = (user && user.user_metadata) ? user.user_metadata : {};
+  if (m.nom_agent)       agentInfo.nom           = m.nom_agent;
+  if (m.prenom)          agentInfo.prenom        = m.prenom;
+  if (m.agence)          agentInfo.agence        = m.agence;
+  if (m.adresse_agence)  agentInfo.adresseAgence = m.adresse_agence;
+  if (m.telephone)       agentInfo.telephone     = m.telephone;
+  if (m.telephone_fixe)  agentInfo.telephoneFixe = m.telephone_fixe;
+  if (m.email_pro)       agentInfo.email         = m.email_pro;
+  // 2. Fallback : table profiles (rétrocompatibilité)
   try {
-    const { data } = await _supa.from('profiles').select('*').eq('id', userId).maybeSingle();
-    if (data) {
-      if (data.nom_agent)       agentInfo.nom            = data.nom_agent;
-      if (data.prenom)          agentInfo.prenom         = data.prenom;
-      if (data.agence)          agentInfo.agence         = data.agence;
-      if (data.adresse_agence)  agentInfo.adresseAgence  = data.adresse_agence;
-      if (data.telephone)       agentInfo.telephone      = data.telephone;
-      if (data.telephone_fixe)  agentInfo.telephoneFixe  = data.telephone_fixe;
-      if (data.email_pro)       agentInfo.email          = data.email_pro;
+    const userId = user && (user.id || user);
+    if (typeof userId === 'string') {
+      const { data } = await _supa.from('profiles').select('*').eq('id', userId).maybeSingle();
+      if (data) {
+        if (data.nom_agent)       agentInfo.nom           = data.nom_agent;
+        if (data.prenom)          agentInfo.prenom        = data.prenom;
+        if (data.agence)          agentInfo.agence        = data.agence;
+        if (data.adresse_agence)  agentInfo.adresseAgence = data.adresse_agence;
+        if (data.telephone)       agentInfo.telephone     = data.telephone;
+        if (data.telephone_fixe)  agentInfo.telephoneFixe = data.telephone_fixe;
+        if (data.email_pro)       agentInfo.email         = data.email_pro;
+      }
     }
-  } catch(e) { console.warn('loadUserProfile failed:', e); }
+  } catch(e) { /* table profiles absente ou RLS — non bloquant */ }
+  // Synchronise le localStorage avec les données cloud
+  try { localStorage.setItem(LS_AGENT, JSON.stringify(agentInfo)); } catch(e) {}
 }
 
 async function saveUserProfile() {
   if (!_currentUser) return;
+  const profileData = {
+    nom_agent:      agentInfo.nom,
+    prenom:         agentInfo.prenom,
+    agence:         agentInfo.agence,
+    adresse_agence: agentInfo.adresseAgence,
+    telephone:      agentInfo.telephone,
+    telephone_fixe: agentInfo.telephoneFixe,
+    email_pro:      agentInfo.email,
+  };
+  // 1. Sauvegarde dans user_metadata (primaire — fonctionne sans table dédiée)
+  try {
+    await _supa.auth.updateUser({ data: profileData });
+    // Synchronise localStorage
+    try { localStorage.setItem(LS_AGENT, JSON.stringify(agentInfo)); } catch(e) {}
+    showProfileSaved();
+  } catch(e) { console.warn('saveUserProfile (metadata) failed:', e); }
+  // 2. Sauvegarde dans la table profiles (secondaire — silencieux si absente)
   try {
     await _supa.from('profiles').upsert({
-      id:              _currentUser.id,
-      nom_agent:       agentInfo.nom,
-      prenom:          agentInfo.prenom,
-      agence:          agentInfo.agence,
-      adresse_agence:  agentInfo.adresseAgence,
-      telephone:       agentInfo.telephone,
-      telephone_fixe:  agentInfo.telephoneFixe,
-      email_pro:       agentInfo.email,
-      updated_at:      new Date().toISOString(),
+      id:          _currentUser.id,
+      ...profileData,
+      updated_at:  new Date().toISOString(),
     });
-  } catch(e) { console.warn('saveUserProfile failed:', e); }
+  } catch(e) { /* table profiles absente ou RLS — non bloquant */ }
 }
 
 // ── Persistence cloud (autosave) ──────────────────────────────────
@@ -5179,6 +5206,15 @@ function showCloudBadge() {
   badge.classList.add('visible');
   clearTimeout(_cloudSaveBadgeTimer);
   _cloudSaveBadgeTimer = setTimeout(() => badge.classList.remove('visible'), 3000);
+}
+
+let _profileSavedTimer = null;
+function showProfileSaved() {
+  const el = document.getElementById('profile-saved-msg');
+  if (!el) return;
+  el.style.opacity = '1';
+  clearTimeout(_profileSavedTimer);
+  _profileSavedTimer = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 
 // ── Sessions nommées ──────────────────────────────────────────────
