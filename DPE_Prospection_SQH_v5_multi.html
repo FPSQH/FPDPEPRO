@@ -1683,8 +1683,8 @@ const DPE_FG = {A:'#7effc0',B:'#6ef098',C:'#c0f060',D:'#ffd840',E:'#ffb060',F:'#
 function initMap() {
   if (leafletMap) return;
   leafletMap = L.map('map', { zoomControl: true }).setView([48.5, -3.0], 9);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>', maxZoom: 19
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 20
   }).addTo(leafletMap);
 }
 
@@ -4106,28 +4106,77 @@ function buildGeorisquesHTML(risques) {
     <div style="font-size:10px;color:var(--sqh-gray4);margin-top:5px">Source : Géorisques / BRGM — périmètre 1 km</div>`;
 }
 
+// ─ Niveau 1 : Signal marché local ─
+function buildMarketSignal(b) {
+  var dpe  = (b.dpe  || '').toUpperCase();
+  var surf = parseInt(b.surface) || 0;
+  var mpr  = surf > 0
+    ? ('Pour ' + surf + ' m², projet de rénovation éligible à MaPrimeRénov’ — voir onglet Rénovation.')
+    : 'Un projet de rénovation peut être éligible à MaPrimeRénov’.';
+  var map = {
+    G: { color:'#E3000B', titre:'DPE G — restrictions de location en vigueur',
+         texte:'Interdit à la location depuis janvier 2023. Vente possible avec décote. Profil acquéreur : investisseurs avec projet de rénovation. ' + mpr },
+    F: { color:'#E3000B', titre:'DPE F — restrictions depuis jan. 2025',
+         texte:'Interdit à la location depuis le 1er janvier 2025. Vente possible avec décote attendue selon le secteur. ' + mpr },
+    E: { color:'#c8a800', titre:'DPE E — restrictions à venir dès 2034',
+         texte:'Gel des loyers depuis 2023. Interdiction de location prévue en 2034. Audit énergétique obligatoire depuis jan. 2025. Opportunité : les propriétaires sont souvent demandeurs d’accompagnement.' },
+    D: { color:'#038B92', titre:'DPE D — marché actif, pas de restriction immédiate',
+         texte:'Segment le plus représenté dans le parc français. Pas de contrainte réglementaire à court terme. Le DPE D devient un argument différenciateur face aux passoires du secteur.' },
+    C: { color:'#038B92', titre:'DPE C — bonne performance énergétique',
+         texte:'Bien valué. Argument de vente concret face aux logements moins performants, notamment pour les primo-accédants sensibles aux charges.' },
+    B: { color:'#1a5228', titre:'DPE B — très bonne performance énergétique',
+         texte:'Atout de premier plan. Acquéreurs exigeants et investisseurs sensibles aux charges ciblent ce niveau. Argument différenciateur là où le parc est majoritairement classé D–E.' },
+    A: { color:'#1a5c38', titre:'DPE A — performance maximale',
+         texte:'Segment rare en milieu rural et semi-urbain. Acheteurs peu nombreux mais très qualifiés — argument de vente de premier ordre.' },
+  };
+  return map[dpe] || null;
+}
+
 function buildDVFHTML(mutations, b) {
-  const fmtEur = v => Math.round(v).toLocaleString('fr-FR');
-  // Signal 'links' : afficher les liens officiels DVF (CORS non supporté en local)
+  var fmtEur = function(v) { return Math.round(v).toLocaleString('fr-FR'); };
+  // Niveau 1 : liens enrichis
   if (mutations === 'links' || mutations === null) {
-    const lat = b.geo ? b.geo.lat : '';
-    const lon = b.geo ? b.geo.lon : '';
-    const exploreUrl = b.geo
-      ? `https://explore.data.gouv.fr/immobilier?lat=${lat}&lng=${lon}&zoom=17`
-      : 'https://explore.data.gouv.fr/immobilier';
-    const dvfUrl = b.geo
-      ? `https://app.dvf.etalab.gouv.fr/?lon=${lon}&lat=${lat}&zoom=17`
-      : 'https://app.dvf.etalab.gouv.fr/';
-    return `<div style="display:flex;flex-direction:column;gap:8px">
-      <div style="background:var(--sqh-green-l);border:1px solid #b3d9c8;border-radius:8px;padding:10px 13px;font-size:11px;color:var(--sqh-green-d);line-height:1.6">
-        <strong>Consultez les transactions DVF</strong> directement sur les explorateurs officiels — ils affichent automatiquement la carte centrée sur ce bien.
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <a href="${exploreUrl}" target="_blank" class="btn btn-green" style="font-size:11px">🏛️ Explorateur data.gouv.fr →</a>
-        <a href="${dvfUrl}" target="_blank" class="btn btn-outline" style="font-size:11px">📊 App DVF Étalab →</a>
-      </div>
-      <div style="font-size:10px;color:var(--sqh-gray4);line-height:1.5">Source : DGFiP — Demandes de Valeurs Foncières · Accès libre · Données cadastrales officielles</div>
-    </div>`;
+    var lat     = b.geo ? b.geo.lat : '';
+    var lon     = b.geo ? b.geo.lon : '';
+    var insee   = b._codeInsee || '';
+    var ville   = b.villeFromAddr || (b.geo && b.geo.city) || '';
+    var cp      = b.cpFromAddr || (b.geo && b.geo.postcode) || '';
+    var isM     = !/appart/i.test(b.type || '');
+    var typeLbl = isM ? 'Maison' : 'Appartement';
+    var communeCard = '';
+    if (ville || cp || insee) {
+      communeCard = '<div style="display:flex;align-items:center;gap:10px;background:var(--sqh-green-l);border:1px solid #b3d9c8;border-radius:8px;padding:9px 13px">'
+        + '<span style="font-size:15px;flex-shrink:0">📍</span>'
+        + '<div><div style="font-size:11px;font-weight:700;color:var(--sqh-dark)">' + ville + (cp ? ' ('+cp+')' : '') + '</div>'
+        + (insee ? '<div style="font-size:10px;color:var(--sqh-gray4);margin-top:1px">Code INSEE ' + insee + ' · liens filtrés sur cette commune</div>' : '')
+        + '</div></div>';
+    }
+    var exploreUrl = b.geo ? ('https://explore.data.gouv.fr/immobilier?lat='+lat+'&lng='+lon+'&zoom=17') : 'https://explore.data.gouv.fr/immobilier';
+    var dvfUrl     = b.geo ? ('https://app.dvf.etalab.gouv.fr/?lon='+lon+'&lat='+lat+'&zoom=17') : 'https://app.dvf.etalab.gouv.fr/';
+    var villeSlug  = ville.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+    var notaUrl    = villeSlug ? ('https://nota.immo/prix-immobilier/' + villeSlug) : 'https://nota.immo/';
+    var priceUrl   = insee ? ('https://www.price.immo/communes/' + insee + '/') : 'https://www.price.immo/';
+    var signal = buildMarketSignal(b);
+    var html = '<div style="display:flex;flex-direction:column;gap:10px">';
+    html += communeCard;
+    html += '<div>';
+    html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--sqh-gray4);margin-bottom:5px">' + typeLbl + 's — transactions DVF</div>';
+    html += '<div style="font-size:11px;color:var(--sqh-gray5);background:var(--sqh-gray1);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.55">Explorateurs centrés sur ce bien — filtrez par <strong>' + typeLbl + '</strong> pour les comparables.</div>';
+    html += '<div style="display:flex;gap:7px;flex-wrap:wrap">';
+    html += '<a href="' + exploreUrl + '" target="_blank" class="btn btn-green" style="font-size:11px">🏛️ data.gouv.fr →</a>';
+    html += '<a href="' + dvfUrl + '" target="_blank" class="btn btn-outline" style="font-size:11px">📊 DVF Étalab →</a>';
+    html += '</div></div>';
+    html += '<div>';
+    html += '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--sqh-gray4);margin-bottom:5px">Prix au m² — ' + (ville || 'secteur') + '</div>';
+    html += '<div style="font-size:11px;color:var(--sqh-gray5);background:var(--sqh-gray1);border-radius:6px;padding:7px 10px;margin-bottom:7px;line-height:1.55">Prix médian, volumes et tendances sur 12 mois par commune.</div>';
+    html += '<div style="display:flex;gap:7px;flex-wrap:wrap">';
+    html += '<a href="' + notaUrl  + '" target="_blank" class="btn btn-outline" style="font-size:11px">📈 nota.immo →</a>';
+    html += '<a href="' + priceUrl + '" target="_blank" class="btn btn-outline" style="font-size:11px">🏘️ price.immo →</a>';
+    html += '</div></div>';
+    if (signal) html += '<div style="border-left:3px solid ' + signal.color + ';background:var(--sqh-gray1);border-radius:0 6px 6px 0;padding:9px 12px;font-size:11px;color:var(--sqh-gray5);line-height:1.55"><strong style="display:block;color:var(--sqh-dark);margin-bottom:3px">' + signal.titre + '</strong>' + signal.texte + '</div>';
+    html += '<div style="font-size:10px;color:var(--sqh-gray4);line-height:1.5;border-top:1px solid var(--sqh-gray2);padding-top:7px">Source : DGFiP — DVF+ · Données cadastrales · Millésime 2022–2024 · MAJ ∼2×/an</div>';
+    html += '</div>';
+    return html;
   }
   if (mutations.length === 0)
     return `<div style="font-size:11px;color:var(--sqh-gray4);background:var(--sqh-gray1);padding:9px 12px;border-radius:8px;border:1px solid var(--sqh-gray2)">Aucune transaction trouvée dans un rayon de 1 km.</div>`;
