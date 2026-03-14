@@ -2533,6 +2533,11 @@ function letterToDocxParagraphs(b) {
       children: [new TextRun({ text: 'Conseiller Immobilier', font: 'Arial', size: 15, color: GREY })],
       spacing: { after: 20 },
     }),
+    (agentInfo.telephone || agentInfo.telephoneFixe) ? new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      children: [new TextRun({ text: `📞 ${[agentInfo.telephone, agentInfo.telephoneFixe].filter(Boolean).join(' | ')}`, font: 'Arial', size: 15, color: GREY })],
+      spacing: { after: 20 },
+    }) : null,
     agentInfo.email ? new Paragraph({
       alignment: AlignmentType.RIGHT,
       children: [new TextRun({ text: `✉ ${agentInfo.email}`, font: 'Arial', size: 15, color: BODY })],
@@ -2647,7 +2652,7 @@ function letterToDocxParagraphs(b) {
 
   // ── Politesse ────────────────────────────────────────────────────────────────
   paras.push(emptyLine(60));
-  paras.push(bodyPara(`Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous, sans aucun engagement de votre part.`));
+  paras.push(bodyPara(`Je reste à votre entière disposition pour répondre à vos questions ou convenir d'un rendez-vous à votre convenance, sans aucun engagement de votre part.`));
   paras.push(emptyLine(40));
   paras.push(bodyPara(`Dans l'attente de votre retour, je vous adresse, ${d.signoff}, mes cordiales salutations.`));
 
