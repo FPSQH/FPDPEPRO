@@ -430,10 +430,15 @@ html,body{height:100%;font-family:var(--font);background:var(--sqh-gray1);color:
 }
 .suivi-statut-chip:hover{border-color:var(--sqh-green);color:var(--sqh-green)}
 .suivi-statut-chip.active{background:var(--sqh-green);border-color:var(--sqh-green);color:white}
-.suivi-statut-chip[data-val="Pas intéressé"].active{background:var(--sqh-red);border-color:var(--sqh-red)}
-.suivi-statut-chip[data-val="À recontacter"].active{background:#e08000;border-color:#e08000}
-.suivi-statut-chip[data-val="Mandat signé"].active{background:#1a5c38;border-color:#1a5c38}
-.suivi-statut-chip[data-val="Prescri CA"].active{background:#2563a8;border-color:#2563a8}
+.suivi-statut-chip[data-val="Pas intéressé"].active{background:#c00000;border-color:#c00000}
+.suivi-statut-chip[data-val="Courrier déposé"].active{background:#6b9e2a;border-color:#6b9e2a}
+.suivi-statut-chip[data-val="Visite prévue"].active{background:#2563a8;border-color:#2563a8}
+.suivi-statut-chip[data-val="En vente"].active{background:#e08000;border-color:#e08000}
+.suivi-statut-chip[data-val="Sous mandat SQH"].active{background:#1a5c38;border-color:#1a5c38}
+/* chips projet */
+.suivi-projet-chip{padding:3px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;border:1.5px solid var(--sqh-gray3);background:white;color:var(--sqh-gray5);transition:all .12s;user-select:none}
+.suivi-projet-chip:hover{border-color:var(--sqh-green);color:var(--sqh-green)}
+.suivi-projet-chip.active{background:var(--sqh-green);border-color:var(--sqh-green);color:white}
 .suivi-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:4px;position:sticky;bottom:0;background:white;padding-bottom:10px;border-top:1px solid var(--sqh-gray2);margin-top:8px;z-index:5}
 .suivi-saved{font-size:11px;font-weight:600;color:var(--sqh-green);opacity:0;transition:opacity .3s}
 .suivi-saved.show{opacity:1}
@@ -1266,7 +1271,7 @@ function loadBiens(rows) {
       geo: null, geoStatus: 'none',
       checked: false, visible: true,
       ademe: null,
-      suivi: { nom:'', prenom:'', telephone:'', email:'', projet:'', statut:'', dateRelance:'', notes:'' },
+      suivi: { nom:'', prenom:'', telephone:'', email:'', projet:'', statut:[], dateRelance:'', notes:'' },
     };
   }).filter(b => b.adresse);
 
@@ -1807,7 +1812,7 @@ function cardHTML(b) {
       <div style="display:flex;gap:5px;align-items:center;margin-top:3px;flex-wrap:wrap">
         ${numeroDpe}
         ${auditBadge}
-        ${b.suivi && b.suivi.statut ? `<span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:10px;background:${STATUT_COLORS[b.suivi.statut]||'var(--sqh-gray2)'};color:white">${b.suivi.statut}</span>` : ''}
+        ${b.suivi && (Array.isArray(b.suivi.statut) ? b.suivi.statut.length : b.suivi.statut) ? (Array.isArray(b.suivi.statut) ? b.suivi.statut : [b.suivi.statut]).map(v => `<span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:10px;background:${STATUT_COLORS[v]||'var(--sqh-gray2)'};color:white;margin-right:2px">${v}</span>`).join('') : ''}
       </div>
     </div>
   </div>`;
@@ -2722,7 +2727,8 @@ async function downloadWordAll() {
 function getSuiviFilled() {
   return biens.filter(function(b) {
     var s = b.suivi || {};
-    return s.nom || s.prenom || s.telephone || s.email || s.notes || s.statut || s.projet;
+    const _hasStatut = Array.isArray(s.statut) ? s.statut.length > 0 : !!s.statut;
+    return s.nom || s.prenom || s.telephone || s.email || s.notes || _hasStatut || s.projet;
   });
 }
 
@@ -2746,9 +2752,10 @@ function formatFicheText(b) {
     '',
     '🎯 PROSPECTION',
     'Projet     : ' + (s.projet || '—'),
-    'Statut     : ' + (s.statut || '—'),
+    'Statut     : ' + (Array.isArray(s.statut) ? s.statut.join(', ') : s.statut || '—'),
   ];
-  if (s.statut === 'Visite prévue' && s.dateVisite) {
+  const _statuts = Array.isArray(s.statut) ? s.statut : (s.statut ? [s.statut] : []);
+  if (_statuts.includes('Visite prévue') && s.dateVisite) {
     var dv = new Date(s.dateVisite).toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
     lines.push('Visite     : ' + dv + ' de ' + (s.heureDebut||'?') + ' à ' + (s.heureFin||'?'));
   }
@@ -2893,22 +2900,24 @@ function initResizeHandle() {
 
 // ══════════════════════════════ SUIVI ══════════════════════════════════════
 
-const SUIVI_STATUTS = ['À contacter','Contacté','À recontacter','Visite prévue','Mandat signé','Pas intéressé'];
+const SUIVI_STATUTS = ['Contacté','Courrier déposé','Visite prévue','En vente','Sous mandat SQH','Pas intéressé'];
 const STATUT_COLORS = {
-  'À contacter': '#6b9e2a',
-  'Contacté': '#038B92',
-  'À recontacter': '#e08000',
-  'Visite prévue': '#2563a8',
-  'Mandat signé': '#1a5c38',
-  'Pas intéressé': '#c00000',
+  'Contacté':        '#038B92',
+  'Courrier déposé': '#6b9e2a',
+  'Visite prévue':   '#2563a8',
+  'En vente':        '#e08000',
+  'Sous mandat SQH': '#1a5c38',
+  'Pas intéressé':   '#c00000',
 };
 const STATUT_CLASS = {
-  'À recontacter': 'sv-recontacter',
-  'Mandat signé': 'sv-mandat',
-  'Pas intéressé': 'sv-pasinteresse',
-  'Contacté': 'sv-contact',
+  'Contacté':        'sv-contact',
+  'Courrier déposé': 'sv-courrier',
+  'Visite prévue':   'sv-visite',
+  'En vente':        'sv-envente',
+  'Sous mandat SQH': 'sv-mandat',
+  'Pas intéressé':   'sv-pasinteresse',
 };
-const SUIVI_PROJETS = ['Vente','Estimation','Gestion locative','Location','Travaux','Autre'];
+const SUIVI_PROJETS = ['Vente','Location','Travaux','Estimation','Autre'];
 
 function updateSuiviBadge(b) {
   const badge = document.getElementById('suivi-badge-dot');
@@ -2922,14 +2931,18 @@ function updateSuiviBadge(b) {
 function renderProspectionTab(b) {
   const s = b.suivi || {};
   const tips = buildStrategy(b);
+  // statut est un tableau (multi-select)
+  const statuts = Array.isArray(s.statut) ? s.statut : (s.statut ? [s.statut] : []);
   const statutChips = SUIVI_STATUTS.map(v =>
-    `<span class="suivi-statut-chip${s.statut===v?' active':''}" data-val="${v}" onclick="setSuiviStatut(${b.id},'${v}',this)">${v}</span>`
+    `<span class="suivi-statut-chip${statuts.includes(v)?' active':''}" data-val="${v}" onclick="setSuiviStatut(${b.id},'${v}',this)">${v}</span>`
   ).join('');
-  const projetOpts = SUIVI_PROJETS.map(v =>
-    `<option value="${v}"${s.projet===v?' selected':''}>${v}</option>`
+  // projet : chips mono-sélection
+  const projetChips = SUIVI_PROJETS.map(v =>
+    `<span class="suivi-projet-chip${s.projet===v?' active':''}" data-val="${v}" onclick="setSuiviProjet(${b.id},'${v}',this)">${v}</span>`
   ).join('');
 
-  const suiviStatus = s.statut ? `<span class="badge" style="background:${STATUT_COLORS[s.statut]||'var(--sqh-gray2)'};color:${STATUT_COLORS[s.statut]?'white':'var(--sqh-gray5)'};margin-left:6px">${s.statut}</span>` : '';
+  const statuts = Array.isArray(s.statut) ? s.statut : (s.statut ? [s.statut] : []);
+  const suiviStatus = statuts.length ? statuts.map(v => `<span class="badge" style="background:${STATUT_COLORS[v]||'var(--sqh-gray2)'};color:white;margin-left:4px">${v}</span>`).join('') : '';
 
   return `<div class="fadein" style="padding-bottom:16px">
     <div style="font-size:12px;font-weight:700;color:var(--sqh-dark);margin-bottom:12px;line-height:1.3;display:flex;align-items:center;flex-wrap:wrap;gap:6px">
@@ -2962,8 +2975,8 @@ function renderProspectionTab(b) {
     <!-- Prospection -->
     <div class="section-hd">🎯 Suivi prospection</div>
     <div class="suivi-grid" style="margin-bottom:12px">
-      <div class="suivi-field"><label>Projet</label>
-        <select id="sf-projet"><option value="">— Sélectionner —</option>${projetOpts}</select></div>
+      <div class="suivi-field full"><label>Projet</label>
+        <div class="suivi-statut" id="sf-projet-chips">${projetChips}</div></div>
       <div class="suivi-field"><label>Date de relance</label>
         <input id="sf-dateRelance" type="date" value="${s.dateRelance||''}"/></div>
       <div class="suivi-field full"><label>Statut</label>
@@ -3016,20 +3029,40 @@ function setSuiviStatut(id, val, el) {
   const b = biens[id];
   if (!b) return;
   if (!b.suivi) b.suivi = {};
-  if (b.suivi.statut === val) {
-    b.suivi.statut = '';
+  // statut est un tableau pour la multi-sélection
+  if (!Array.isArray(b.suivi.statut)) {
+    b.suivi.statut = b.suivi.statut ? [b.suivi.statut] : [];
+  }
+  const idx = b.suivi.statut.indexOf(val);
+  if (idx !== -1) {
+    // déjà actif → on le désélectionne
+    b.suivi.statut.splice(idx, 1);
     el.classList.remove('active');
-    showSuiviSaved(); updateSuiviBadge(b); renderCard(id);
-    return;
-  }
-  b.suivi.statut = val;
-  document.querySelectorAll('.suivi-statut-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  if (val === 'Visite prévue') {
-    openVisiteModal(id);
   } else {
-    persistSuivis(); showSuiviSaved(); updateSuiviBadge(b); renderCard(id);
+    b.suivi.statut.push(val);
+    el.classList.add('active');
+    if (val === 'Visite prévue') {
+      openVisiteModal(id);
+      return;
+    }
   }
+  persistSuivis(); showSuiviSaved(); updateSuiviBadge(b); renderCard(id);
+}
+
+function setSuiviProjet(id, val, el) {
+  const b = biens[id];
+  if (!b) return;
+  if (!b.suivi) b.suivi = {};
+  // mono-sélection : toggle
+  if (b.suivi.projet === val) {
+    b.suivi.projet = '';
+    el.classList.remove('active');
+  } else {
+    b.suivi.projet = val;
+    document.querySelectorAll('.suivi-projet-chip').forEach(c => c.classList.remove('active'));
+    el.classList.add('active');
+  }
+  persistSuivis(); showSuiviSaved(); updateSuiviBadge(b);
 }
 
 function saveSuivi(id) {
@@ -3041,7 +3074,10 @@ function saveSuivi(id) {
   b.suivi.prenom     = g('sf-prenom');
   b.suivi.telephone  = g('sf-telephone');
   b.suivi.email      = g('sf-email');
-  b.suivi.projet     = g('sf-projet');
+  // projet : valeur portée par les chips (déjà sauvegardée via setSuiviProjet),
+  // on la relit depuis le chip actif pour cohérence
+  const projetChipEl = document.querySelector('.suivi-projet-chip.active');
+  b.suivi.projet = projetChipEl ? projetChipEl.dataset.val : (b.suivi.projet || '');
   b.suivi.dateRelance= g('sf-dateRelance');
   b.suivi.notes      = g('sf-notes');
   var pcaEl = document.getElementById('sf-prescriptionCA');
@@ -3055,7 +3091,7 @@ function saveSuivi(id) {
 function clearSuivi(id) {
   const b = biens[id];
   if (!b) return;
-  b.suivi = { nom:'', prenom:'', telephone:'', email:'', projet:'', statut:'', dateRelance:'', notes:'' };
+  b.suivi = { nom:'', prenom:'', telephone:'', email:'', projet:'', statut:[], dateRelance:'', notes:'' };
   updateSuiviBadge(b);
   renderCard(id);
   renderDetail();
@@ -3109,7 +3145,7 @@ function sendSuiviEmail(id) {
     ``,
     `PROSPECTION`,
     `Projet      : ${s.projet||'—'}`,
-    `Statut      : ${s.statut||'—'}`,
+    `Statut      : ${Array.isArray(s.statut) ? s.statut.join(', ') : (s.statut||'—')}`,
     `Relance     : ${relance}`,
     ``,
     `NOTES`,
@@ -3855,7 +3891,7 @@ function ademeNormalize(r, i) {
       statut_geocodage: r.statut_geocodage || null,
     },
     audit: null,
-    suivi:{ nom:'', prenom:'', telephone:'', email:'', projet:'', statut:'', dateRelance:'', notes:'' },
+    suivi:{ nom:'', prenom:'', telephone:'', email:'', projet:'', statut:[], dateRelance:'', notes:'' },
   };
 }
 
