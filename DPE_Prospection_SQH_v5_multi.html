@@ -4556,8 +4556,12 @@ function persistSuivis() {
         map[b.adresse] = b.suivi;
       }
     });
-    localStorage.setItem(LS_KEY,   JSON.stringify(map));
-    localStorage.setItem(LS_AGENT, JSON.stringify(agentInfo));
+    localStorage.setItem(LS_KEY, JSON.stringify(map));
+    // Profil agent dans localStorage uniquement si pas de session Supabase
+    // (la source de verite est Supabase quand l'utilisateur est connecte)
+    if (!_currentUser) {
+      localStorage.setItem(LS_AGENT, JSON.stringify(agentInfo));
+    }
   } catch(e) { console.warn('localStorage save failed:', e); }
   // Autosave cloud — debounce 2 secondes
   if (typeof _currentUser !== 'undefined' && _currentUser && biens.length) {
@@ -4569,18 +4573,23 @@ function persistSuivis() {
 function restoreSuivis() {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return;
-    const map = JSON.parse(raw);
-    let count = 0;
-    biens.forEach(b => {
-      if (map[b.adresse]) { b.suivi = { ...b.suivi, ...map[b.adresse] }; count++; }
-    });
-    if (count > 0) {
-      renderSidebar();
-      showSessionToast('\u{1F504} ' + count + ' suivi(s) restaur\u00e9(s) automatiquement');
+    if (raw) {
+      const map = JSON.parse(raw);
+      let count = 0;
+      biens.forEach(b => {
+        if (map[b.adresse]) { b.suivi = { ...b.suivi, ...map[b.adresse] }; count++; }
+      });
+      if (count > 0) {
+        renderSidebar();
+        showSessionToast('\u{1F504} ' + count + ' suivi(s) restaur\u00e9(s) automatiquement');
+      }
     }
-    const agent = localStorage.getItem(LS_AGENT);
-    if (agent) { try { Object.assign(agentInfo, JSON.parse(agent)); } catch(e){} }
+    // Profil agent : localStorage uniquement si pas de session Supabase active
+    // (evite d'ecraser les donnees cloud avec des donnees perimees d'un autre poste)
+    if (!_currentUser) {
+      const agent = localStorage.getItem(LS_AGENT);
+      if (agent) { try { Object.assign(agentInfo, JSON.parse(agent)); } catch(e){} }
+    }
   } catch(e) { console.warn('localStorage restore failed:', e); }
 }
 
@@ -4698,8 +4707,12 @@ function _restoreFullBiens(savedBiens, payload) {
   }));
 
   if (payload.agentInfo) {
-    Object.assign(agentInfo, payload.agentInfo);
-    try { localStorage.setItem(LS_AGENT, JSON.stringify(agentInfo)); } catch(e) {}
+    // Import JSON : applique le profil uniquement si pas de session Supabase active
+    // (Supabase est la source de verite ; l'import ne doit pas ecraser le profil cloud)
+    if (!_currentUser) {
+      Object.assign(agentInfo, payload.agentInfo);
+      try { localStorage.setItem(LS_AGENT, JSON.stringify(agentInfo)); } catch(e) {}
+    }
   }
 
   buildFilters();
@@ -4793,6 +4806,10 @@ function showSessionToast(msg) {
       <div style="display:flex;justify-content:space-between;align-items:center;padding-top:4px">
         <span id="profile-save-feedback" style="font-size:11px;font-weight:600;color:var(--sqh-green);opacity:0;transition:opacity .4s">✓ Coordonnées sauvegardées</span>
         <button class="btn btn-green" onclick="closeProfileModal()">✓ Enregistrer</button>
+      </div>
+      <div style="border-top:1px solid var(--sqh-gray2);margin-top:12px;padding-top:10px">
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;width:100%" onclick="runSupaDiag()">🔧 Diagnostic connexion Supabase</button>
+        <div id="supa-diag-output" style="margin-top:8px;font-size:10px;font-family:monospace;line-height:1.7;display:none;background:var(--sqh-gray1);border:1px solid var(--sqh-gray2);border-radius:6px;padding:8px 10px;white-space:pre-wrap;max-height:180px;overflow-y:auto"></div>
       </div>
     </div>
   </div>
@@ -4973,7 +4990,7 @@ function showSessionToast(msg) {
 //   Supabase Dashboard → Settings → API
 // ══════════════════════════════════════════════════════════════════
 const SUPABASE_URL      = 'https://ylbgbztagfjsjzhshekd.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_MYVqNNBRMygRK7aolikUhg_LWuPeEHb';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlsYmdienRhZ2Zqc2p6aHNoZWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4NjQzNTIsImV4cCI6MjA4ODQ0MDM1Mn0.GlWmU87syRjFPcpDw5v4vazHvm96x--4-7vgaqcQs14';
 
 const _supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let _currentUser = null;
@@ -5125,14 +5142,108 @@ async function saveUserProfile() {
     telephone_fixe:  agentInfo.telephoneFixe || '',
     email_pro:       agentInfo.email      || '',
     updated_at:      new Date().toISOString(),
-  });
+  }, { onConflict: 'id' });
   if (error) {
-    console.warn('saveUserProfile failed:', error);
+    console.warn('saveUserProfile failed:', error.message, error.code, error.details);
     throw error;
   }
 }
 
-// ── Persistence cloud (autosave) ──────────────────────────────────
+// ── Diagnostic Supabase ───────────────────────────────────────────
+async function runSupaDiag() {
+  const out = document.getElementById('supa-diag-output');
+  out.style.display = 'block';
+  out.innerHTML = '⏳ Diagnostic en cours…';
+
+  const lines = [];
+  const ok  = (msg) => lines.push(`✅ ${msg}`);
+  const err = (msg) => lines.push(`❌ ${msg}`);
+  const inf = (msg) => lines.push(`ℹ️  ${msg}`);
+  const render = () => { out.textContent = lines.join('\n'); };
+
+  // 1. Vérif format de la clé anon
+  inf(`URL : ${SUPABASE_URL}`);
+  if (SUPABASE_ANON_KEY.startsWith('eyJ')) {
+    ok('Clé anon au format JWT ✓');
+  } else if (SUPABASE_ANON_KEY.startsWith('sb_')) {
+    err('Clé au format "sb_publishable_…" — REMPLACEZ-LA par la clé "anon public" JWT (eyJ…) dans Supabase Dashboard → Settings → API');
+  } else {
+    err('Format de clé inconnu — vérifiez Supabase Dashboard → Settings → API');
+  }
+  render();
+
+  // 2. Session courante
+  try {
+    const { data: { session }, error } = await _supa.auth.getSession();
+    if (error) { err(`Auth getSession : ${error.message}`); }
+    else if (session?.user) {
+      ok(`Session active — user_id : ${session.user.id}`);
+      inf(`Email : ${session.user.email}`);
+    } else {
+      err('Aucune session active — connectez-vous d\'abord');
+    }
+  } catch(e) { err(`Auth exception : ${e.message}`); }
+  render();
+
+  // 3. Lecture table profiles
+  if (_currentUser) {
+    try {
+      const { data, error, status } = await _supa.from('profiles').select('*').eq('id', _currentUser.id).maybeSingle();
+      if (error) {
+        err(`SELECT profiles → HTTP ${status} : ${error.message} (code: ${error.code})`);
+        if (status === 401 || status === 403) err('→ Vérifiez les politiques RLS : la table "profiles" doit autoriser SELECT pour auth.uid() = id');
+        if (error.code === '42P01') err('→ La table "profiles" n\'existe pas ! Créez-la (voir instructions ci-dessous)');
+      } else if (data) {
+        ok(`Ligne trouvée dans profiles (updated_at: ${data.updated_at || 'non défini'})`);
+        inf(`Champs : prenom="${data.prenom||''}" nom="${data.nom_agent||''}" agence="${data.agence||''}"`);
+      } else {
+        inf('Aucune ligne dans profiles pour cet utilisateur (sera créée au prochain enregistrement)');
+      }
+    } catch(e) { err(`SELECT exception : ${e.message}`); }
+    render();
+
+    // 4. Test écriture (upsert)
+    try {
+      const { error, status } = await _supa.from('profiles').upsert({
+        id: _currentUser.id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+      if (error) {
+        err(`UPSERT profiles → HTTP ${status} : ${error.message} (code: ${error.code})`);
+        if (status === 401 || status === 403) err('→ Vérifiez la politique RLS INSERT/UPDATE pour auth.uid() = id');
+        if (error.code === '42P01') err('→ Table "profiles" manquante');
+      } else {
+        ok('UPSERT profiles réussi ✓ — la sauvegarde fonctionne');
+      }
+    } catch(e) { err(`UPSERT exception : ${e.message}`); }
+    render();
+  }
+
+  // 5. Résumé et instructions si problème
+  const hasError = lines.some(l => l.startsWith('❌'));
+  if (!hasError) {
+    ok('Tout est opérationnel — si le profil ne se charge pas, videz le cache navigateur');
+  } else {
+    lines.push('');
+    lines.push('📋 SQL À EXÉCUTER dans Supabase Dashboard → SQL Editor :');
+    lines.push('-- 1. Créer la table profiles');
+    lines.push('create table if not exists public.profiles (');
+    lines.push('  id uuid primary key references auth.users(id) on delete cascade,');
+    lines.push('  prenom text, nom_agent text, agence text,');
+    lines.push('  adresse_agence text, telephone text,');
+    lines.push('  telephone_fixe text, email_pro text,');
+    lines.push('  updated_at timestamptz default now()');
+    lines.push(');');
+    lines.push('-- 2. Activer RLS');
+    lines.push('alter table public.profiles enable row level security;');
+    lines.push('-- 3. Politiques RLS');
+    lines.push('create policy "Lecture profil propre" on public.profiles');
+    lines.push('  for select using (auth.uid() = id);');
+    lines.push('create policy "Ecriture profil propre" on public.profiles');
+    lines.push('  for all using (auth.uid() = id) with check (auth.uid() = id);');
+  }
+  render();
+}
 async function persistSuiviCloud() {
   if (!_currentUser || !biens.length) return;
   try {
