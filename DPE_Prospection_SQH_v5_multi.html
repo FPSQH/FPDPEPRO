@@ -2941,7 +2941,6 @@ function renderProspectionTab(b) {
     `<span class="suivi-projet-chip${s.projet===v?' active':''}" data-val="${v}" onclick="setSuiviProjet(${b.id},'${v}',this)">${v}</span>`
   ).join('');
 
-  const statuts = Array.isArray(s.statut) ? s.statut : (s.statut ? [s.statut] : []);
   const suiviStatus = statuts.length ? statuts.map(v => `<span class="badge" style="background:${STATUT_COLORS[v]||'var(--sqh-gray2)'};color:white;margin-left:4px">${v}</span>`).join('') : '';
 
   return `<div class="fadein" style="padding-bottom:16px">
