@@ -2516,6 +2516,9 @@ function printLetter() {
           style="flex:1;padding:10px;background:#038B92;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
           🗂️ Lancer l'ilotage
         </button>
+        <button onclick="clearIlots()"
+          style="padding:10px 14px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap"
+          title="Effacer les îlots de la carte">🗑️</button>
         <button onclick="closeSecteurPanel()"
           style="padding:10px 16px;background:#F5F6F6;color:#58595B;border:1px solid #C4CCCC;border-radius:8px;font-size:13px;cursor:pointer">
           Fermer
@@ -6046,13 +6049,18 @@ async function fetchAdeme(cp) {
     var r1 = await fetch(BASE + '?' + p1.toString());
     if (r1.ok) { var j1 = await r1.json(); total = j1.total || 0; }
   } catch(e) {}
+  // 2 requêtes séparées F + G (évite les parenthèses imbriquées rejetées par ADEME)
   try {
-    var fgQ = '(' + cpQ + ') AND (classe_consommation_energie:"F" OR classe_consommation_energie:"G")';
-    // URLSearchParams encode ( et ) en %28/%29 — ADEME les refuse → on les redécode
-    var p2str = new URLSearchParams({ size: 0, qs: fgQ }).toString()
-                    .replace(/%28/gi, '(').replace(/%29/gi, ')');
-    var r2  = await fetch(BASE + '?' + p2str);
-    if (r2.ok) { var j2 = await r2.json(); fg = j2.total || 0; }
+    var pF = new URLSearchParams({ size: 0,
+      qs: cpQ + ' AND classe_consommation_energie:"F"' });
+    var rF = await fetch(BASE + '?' + pF.toString());
+    if (rF.ok) { var jF = await rF.json(); fg += jF.total || 0; }
+  } catch(e) {}
+  try {
+    var pG = new URLSearchParams({ size: 0,
+      qs: cpQ + ' AND classe_consommation_energie:"G"' });
+    var rG = await fetch(BASE + '?' + pG.toString());
+    if (rG.ok) { var jG = await rG.json(); fg += jG.total || 0; }
   } catch(e) {}
   return { total: total, fg: fg };
 }
@@ -6230,17 +6238,445 @@ function renderSecteurResult(d) {
     + (d.dvfOk ? ' \u00b7 DVF (cquest.org)' : ' \u00b7 DVF non disponible');
 }
 
-// ── Ilotage (module v2) ───────────────────────────────────────────────────────
-function lancerIlotage() {
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODULE ÎLOTAGE — BAN + ADEME → DBSCAN → parcours optimal
+// Paramètres : 35 portes / 2h · ε=100m · maisons prioritaires · DPE récent
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _ilotLayers = null;   // LayerGroup Leaflet courant
+
+// ── Constantes îlotage ────────────────────────────────────────────────────────
+var ILOT_PORTES_SESSION = 35;   // cible portes par session 2h
+var ILOT_DIST_MAX_M     = 100;  // distance max entre 2 adresses consécutives (m)
+var ILOT_DBSCAN_EPS     = 100;  // epsilon DBSCAN en mètres
+var ILOT_DBSCAN_MINPTS  = 3;    // min points pour former un cluster
+
+// ── Entrée principale ─────────────────────────────────────────────────────────
+async function lancerIlotage() {
   if (!_secteurData) return;
   closeSecteurPanel();
+
+  // Nettoyage des anciens îlots
+  if (_ilotLayers) { leafletMap.removeLayer(_ilotLayers); _ilotLayers = null; }
+
+  // Toast de progression
   var toast = document.getElementById('session-toast');
-  if (toast) {
-    toast.textContent = "Ilotage " + _secteurData.nomVille + " — module disponible en v2";
+  function setToast(msg) {
+    if (!toast) return;
+    toast.textContent = msg;
     toast.style.display = 'block';
-    setTimeout(function(){ toast.style.display = 'none'; }, 3000);
+  }
+  function hideToast() { if (toast) toast.style.display = 'none'; }
+
+  try {
+    setToast('Récupération des adresses BAN…');
+    var adresses = await fetchBanAdresses(_secteurData.cp);
+    if (!adresses.length) { setToast('Aucune adresse trouvée pour ce CP.'); setTimeout(hideToast, 3000); return; }
+
+    setToast('Enrichissement DPE ADEME…');
+    var dpeMap = await fetchAdemeForIlotage(_secteurData.codeInsee);
+
+    setToast('Calcul des îlots…');
+    var points = construirePoints(adresses, dpeMap);
+    var clusters = dbscan(points, ILOT_DBSCAN_EPS, ILOT_DBSCAN_MINPTS);
+    var ilots = clusters.map((cluster, idx) => optimiserIlot(cluster, idx));
+    ilots.sort((a, b) => b.score - a.score);
+
+    setToast('Affichage…');
+    afficherIlots(ilots);
+
+    // Stats dans le toast
+    var nbIlots = ilots.filter(i => i.portes.length >= 5).length;
+    setToast(nbIlots + ' îlot(s) trouvé(s) — ' + points.length + ' adresses analysées');
+    setTimeout(hideToast, 4000);
+
+  } catch(err) {
+    setToast('Erreur îlotage : ' + err.message);
+    setTimeout(hideToast, 5000);
+    console.error('Îlotage error:', err);
   }
 }
+
+// ── 1. Fetch BAN : toutes adresses housenumber du CP ─────────────────────────
+// L'API BAN refuse q= vide (400). Stratégie : requêtes parallèles sur les
+// types de voies les plus courants en France → déduplication par id.
+async function fetchBanAdresses(cp) {
+  // Types de voies couvrant ~95 % des adresses françaises
+  var termes = ['rue','avenue','boulevard','chemin','route','allée',
+                'impasse','place','voie','hameau','lieu','lotissement',
+                'résidence','cité','passage'];
+
+  var BASE = 'https://api-adresse.data.gouv.fr/search/';
+  var seen = {};
+  var results = [];
+
+  // Lancer les requêtes par lots de 5 pour ne pas surcharger
+  for (var i = 0; i < termes.length; i += 5) {
+    var batch = termes.slice(i, i + 5);
+    var promises = batch.map(function(terme) {
+      var url = BASE + '?q=' + encodeURIComponent(terme)
+              + '&postcode=' + cp
+              + '&type=housenumber&limit=5000&autocomplete=0';
+      return fetch(url)
+        .then(function(r) { return r.ok ? r.json() : { features: [] }; })
+        .catch(function() { return { features: [] }; });
+    });
+    var responses = await Promise.all(promises);
+    responses.forEach(function(data) {
+      (data.features || []).forEach(function(f) {
+        if (!f.geometry || !f.geometry.coordinates || f.geometry.coordinates.length < 2) return;
+        var id = f.properties.id || (f.geometry.coordinates[0] + '|' + f.geometry.coordinates[1]);
+        if (seen[id]) return;
+        seen[id] = true;
+        results.push({
+          id    : id,
+          label : f.properties.label || '',
+          rue   : (f.properties.name || '').toLowerCase(),
+          lon   : f.geometry.coordinates[0],
+          lat   : f.geometry.coordinates[1]
+        });
+      });
+    });
+  }
+  return results;
+}
+
+// ── 2. Fetch ADEME : DPE avec type_batiment + date_visite ────────────────────
+async function fetchAdemeForIlotage(codeInsee) {
+  var BASE = 'https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines';
+  var map = {};  // clé = adresse normalisée → {type_batiment, date_visite, classe}
+  var after = null;
+  var size = 500;
+  var total = 0;
+  var fetched = 0;
+
+  // Première requête pour connaître le total
+  var qsVal = 'code_insee_ban:"' + codeInsee + '"';
+  var p0 = new URLSearchParams({
+    size: size,
+    qs: qsVal,
+    select: 'adresse_ban,type_batiment,date_visite_diagnostiqueur,classe_consommation_energie,latitude,longitude'
+  });
+  var r0 = await fetch(BASE + '?' + p0.toString().replace(/%28/gi,'(').replace(/%29/gi,')'));
+  if (!r0.ok) return map;
+  var d0 = await r0.json();
+  total = d0.total || 0;
+  processAdemeRows(d0.results || [], map);
+  fetched += (d0.results || []).length;
+  after = d0.after;
+
+  // Pages suivantes (max 2000 DPE pour ne pas bloquer l'UI)
+  while (after && fetched < Math.min(total, 2000)) {
+    var p = new URLSearchParams({
+      size: size, qs: qsVal, after: after,
+      select: 'adresse_ban,type_batiment,date_visite_diagnostiqueur,classe_consommation_energie,latitude,longitude'
+    });
+    var r = await fetch(BASE + '?' + p.toString().replace(/%28/gi,'(').replace(/%29/gi,')'));
+    if (!r.ok) break;
+    var d = await r.json();
+    processAdemeRows(d.results || [], map);
+    fetched += (d.results || []).length;
+    after = d.after;
+    if ((d.results || []).length < size) break;
+  }
+
+  return map;
+}
+
+function processAdemeRows(rows, map) {
+  var now = Date.now();
+  rows.forEach(function(r) {
+    var adresse = normaliserAdresse(r.adresse_ban || '');
+    if (!adresse) return;
+    var dateMs = r.date_visite_diagnostiqueur ? new Date(r.date_visite_diagnostiqueur).getTime() : 0;
+    var ageAns = dateMs ? (now - dateMs) / (1000 * 3600 * 24 * 365) : 99;
+    // On garde le DPE le plus récent par adresse
+    if (!map[adresse] || ageAns < map[adresse].ageAns) {
+      map[adresse] = {
+        type     : (r.type_batiment || '').toLowerCase(),
+        classe   : (r.classe_consommation_energie || ''),
+        ageAns   : ageAns,
+        lat      : parseFloat(r.latitude) || 0,
+        lon      : parseFloat(r.longitude) || 0
+      };
+    }
+  });
+}
+
+function normaliserAdresse(s) {
+  if (!s) return '';
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // accents
+    .replace(/\s+/g, ' ').trim();
+}
+
+// ── 3. Construire les points enrichis ────────────────────────────────────────
+function construirePoints(adresses, dpeMap) {
+  var now = Date.now();
+  return adresses.map(function(a) {
+    var key = normaliserAdresse(a.label);
+    var dpe = dpeMap[key] || null;
+
+    // Tentative de match partiel si exact échoue
+    if (!dpe) {
+      var rue = normaliserAdresse(a.rue);
+      for (var k in dpeMap) {
+        if (k.indexOf(rue) !== -1 || rue.indexOf(k.split(' ')[0]) !== -1) {
+          dpe = dpeMap[k]; break;
+        }
+      }
+    }
+
+    // Score de priorité (pour tri dans l'îlot)
+    // Maison = priorité max, DPE récent = bonus
+    var isMaison  = dpe && dpe.type && dpe.type.indexOf('maison') !== -1;
+    var dpeRecent = dpe && dpe.ageAns < 2;
+    var priority  = (isMaison ? 10 : 0) + (dpeRecent ? 5 : 0);
+
+    return {
+      lat      : a.lat,
+      lon      : a.lon,
+      label    : a.label,
+      isMaison : isMaison,
+      hasDpe   : !!dpe,
+      dpeRecent: dpeRecent,
+      classe   : dpe ? dpe.classe : '',
+      priority : priority,
+      cluster  : -1  // sera assigné par DBSCAN
+    };
+  });
+}
+
+// ── 4. DBSCAN spatial (distance haversine en mètres) ─────────────────────────
+function haversineM(lat1, lon1, lat2, lon2) {
+  var R = 6371000;
+  var dLat = (lat2 - lat1) * Math.PI / 180;
+  var dLon = (lon2 - lon1) * Math.PI / 180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2)
+        + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)
+          *Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function dbscan(points, eps, minPts) {
+  var n = points.length;
+  var visited  = new Array(n).fill(false);
+  var noise    = new Array(n).fill(false);
+  var clusters = [];
+
+  // Pré-calculer voisins (O(n²) acceptable pour < 5000 points)
+  function voisins(idx) {
+    var v = [];
+    for (var j = 0; j < n; j++) {
+      if (j !== idx && haversineM(points[idx].lat, points[idx].lon,
+                                   points[j].lat,  points[j].lon) <= eps) {
+        v.push(j);
+      }
+    }
+    return v;
+  }
+
+  for (var i = 0; i < n; i++) {
+    if (visited[i]) continue;
+    visited[i] = true;
+    var N = voisins(i);
+    if (N.length < minPts) {
+      noise[i] = true;
+      continue;
+    }
+    var cluster = [i];
+    points[i].cluster = clusters.length;
+    var queue = N.slice();
+    while (queue.length) {
+      var q = queue.shift();
+      if (!visited[q]) {
+        visited[q] = true;
+        var Nq = voisins(q);
+        if (Nq.length >= minPts) queue = queue.concat(Nq);
+      }
+      if (points[q].cluster === -1) {
+        points[q].cluster = clusters.length;
+        cluster.push(q);
+      }
+    }
+    clusters.push(cluster.map(function(idx) { return points[idx]; }));
+  }
+
+  // Ajouter les points isolés comme îlots d'1 seul (pour ne pas les perdre)
+  // On ignore les vrais isolés, on les laisse de côté
+  return clusters;
+}
+
+// ── 5. Optimiser un îlot : parcours nearest-neighbor + score ─────────────────
+function optimiserIlot(clusterPts, idx) {
+  // Trier par priorité décroissante pour que nearest-neighbor parte des meilleurs
+  var pts = clusterPts.slice().sort(function(a, b) { return b.priority - a.priority; });
+
+  // Nearest-neighbor greedy à partir du point de plus haute priorité
+  var parcours = [];
+  var restants = pts.slice();
+  var current  = restants.splice(0, 1)[0];
+  parcours.push(current);
+
+  while (restants.length && parcours.length < ILOT_PORTES_SESSION) {
+    // Trouver le plus proche dans restants à <= ILOT_DIST_MAX_M
+    var best = null, bestDist = Infinity, bestIdx = -1;
+    for (var i = 0; i < restants.length; i++) {
+      var d = haversineM(current.lat, current.lon, restants[i].lat, restants[i].lon);
+      if (d <= ILOT_DIST_MAX_M && d < bestDist) {
+        bestDist = d;
+        best = restants[i];
+        bestIdx = i;
+      }
+    }
+    if (!best) {
+      // Plus aucun voisin < 100m : chercher le suivant par priorité
+      // (continue le parcours même si > 100m — on s'arrête si trop loin)
+      var nextByPriority = restants[0];
+      var dNext = haversineM(current.lat, current.lon, nextByPriority.lat, nextByPriority.lon);
+      if (dNext > ILOT_DIST_MAX_M * 3) break; // vraiment trop loin → stop
+      bestIdx = 0;
+      best = nextByPriority;
+    }
+    parcours.push(best);
+    restants.splice(bestIdx, 1);
+    current = best;
+  }
+
+  // Score de l'îlot : somme des priorités + bonus densité
+  var score = parcours.reduce(function(s, p) { return s + p.priority; }, 0);
+  score += parcours.length * 2; // bonus densité (nb de portes)
+
+  // Centroïde
+  var centLat = parcours.reduce(function(s, p) { return s + p.lat; }, 0) / parcours.length;
+  var centLon = parcours.reduce(function(s, p) { return s + p.lon; }, 0) / parcours.length;
+
+  // Stats
+  var nbMaisons  = parcours.filter(function(p) { return p.isMaison; }).length;
+  var nbDpeRec   = parcours.filter(function(p) { return p.dpeRecent; }).length;
+  var nbSansDpe  = parcours.filter(function(p) { return !p.hasDpe; }).length;
+  var tempsMin   = parcours.length * 3 + Math.round(parcours.length * 0.5); // ~3,5 min/porte
+
+  return {
+    id       : idx + 1,
+    portes   : parcours,
+    restants : restants,
+    score    : score,
+    centLat  : centLat,
+    centLon  : centLon,
+    nbMaisons: nbMaisons,
+    nbDpeRec : nbDpeRec,
+    nbSansDpe: nbSansDpe,
+    tempsMin : tempsMin
+  };
+}
+
+// ── 6. Affichage Leaflet ──────────────────────────────────────────────────────
+function afficherIlots(ilots) {
+  if (_ilotLayers) { leafletMap.removeLayer(_ilotLayers); _ilotLayers = null; }
+  _ilotLayers = L.layerGroup().addTo(leafletMap);
+
+  // Palette couleurs selon rang (score décroissant)
+  var palette = ['#1a9641','#52a957','#a6d96a','#d9ef8b','#fee08b',
+                 '#fdae61','#f46d43','#d73027','#a50026'];
+
+  var bounds = [];
+
+  ilots.forEach(function(ilot, rank) {
+    if (ilot.portes.length < 3) return; // ignorer micro-clusters
+    var couleur = palette[Math.min(rank, palette.length - 1)];
+    var portes  = ilot.portes;
+
+    // Convex hull simplifié (enveloppe des points)
+    var hull = convexHullSimple(portes.map(function(p) { return [p.lat, p.lon]; }));
+    if (hull.length >= 3) {
+      L.polygon(hull, {
+        color       : couleur,
+        weight      : 2,
+        fillColor   : couleur,
+        fillOpacity : 0.12,
+        dashArray   : '5,4'
+      }).addTo(_ilotLayers);
+    }
+
+    // Polyline du parcours
+    var routeCoords = portes.map(function(p) { return [p.lat, p.lon]; });
+    L.polyline(routeCoords, { color: couleur, weight: 2, opacity: 0.7 })
+      .addTo(_ilotLayers);
+
+    // Markers numérotés
+    portes.forEach(function(p, i) {
+      var isSpecial = p.isMaison || p.dpeRecent;
+      var iconHtml = '<div style="background:' + couleur
+        + ';color:#fff;border-radius:50%;width:22px;height:22px;'
+        + 'line-height:22px;text-align:center;font-size:11px;font-weight:700;'
+        + 'border:2px solid ' + (isSpecial ? '#fff' : 'rgba(0,0,0,.3)') + ';'
+        + 'box-shadow:0 1px 4px rgba(0,0,0,.4)">' + (i+1) + '</div>';
+      var icon = L.divIcon({ html: iconHtml, iconSize: [22,22], iconAnchor: [11,11], className: '' });
+      var tagMaison = p.isMaison ? ' 🏠' : '';
+      var tagDpe    = p.dpeRecent ? ' ⚡récent' : (p.hasDpe ? ' DPE:'+p.classe : ' sans DPE');
+      L.marker([p.lat, p.lon], { icon: icon })
+        .bindPopup('<b>#' + (i+1) + ' — Îlot ' + ilot.id + '</b><br>'
+          + p.label + tagMaison + tagDpe)
+        .addTo(_ilotLayers);
+      bounds.push([p.lat, p.lon]);
+    });
+
+    // Étiquette centrale de l'îlot
+    var labelHtml = '<div style="background:' + couleur
+      + ';color:#fff;padding:3px 8px;border-radius:10px;font-weight:700;'
+      + 'font-size:12px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.3)">'
+      + '🗂️ Îlot ' + ilot.id + ' — ' + portes.length + ' portes'
+      + '</div>';
+    L.marker([ilot.centLat, ilot.centLon], {
+      icon: L.divIcon({ html: labelHtml, className: '', iconAnchor: [50, 12] }),
+      zIndexOffset: 1000
+    }).bindPopup(
+      '<b>🗂️ Îlot ' + ilot.id + '</b> — rang #' + (rank+1) + '<br>'
+      + '📍 ' + portes.length + ' portes (session 2h)<br>'
+      + '🏠 ' + ilot.nbMaisons + ' maisons · '
+      + '⚡ ' + ilot.nbDpeRec + ' DPE récents · '
+      + '❓ ' + ilot.nbSansDpe + ' sans DPE<br>'
+      + '⏱️ ~' + ilot.tempsMin + ' min estimées'
+    ).addTo(_ilotLayers);
+  });
+
+  // Centrer la carte sur les îlots
+  if (bounds.length) {
+    try { leafletMap.fitBounds(L.latLngBounds(bounds), { padding: [40, 40] }); } catch(e) {}
+  }
+}
+
+// ── Convex hull (Monotone chain) ──────────────────────────────────────────────
+function convexHullSimple(pts) {
+  if (pts.length < 3) return pts;
+  var sorted = pts.slice().sort(function(a, b) {
+    return a[0] !== b[0] ? a[0] - b[0] : a[1] - b[1];
+  });
+  function cross(O, A, B) {
+    return (A[0]-O[0])*(B[1]-O[1]) - (A[1]-O[1])*(B[0]-O[0]);
+  }
+  var lower = [], upper = [];
+  for (var i = 0; i < sorted.length; i++) {
+    while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], sorted[i]) <= 0)
+      lower.pop();
+    lower.push(sorted[i]);
+  }
+  for (var i = sorted.length - 1; i >= 0; i--) {
+    while (upper.length >= 2 && cross(upper[upper.length-2], upper[upper.length-1], sorted[i]) <= 0)
+      upper.pop();
+    upper.push(sorted[i]);
+  }
+  upper.pop(); lower.pop();
+  return lower.concat(upper);
+}
+
+// ── Nettoyer les îlots de la carte ───────────────────────────────────────────
+function clearIlots() {
+  if (_ilotLayers) { leafletMap.removeLayer(_ilotLayers); _ilotLayers = null; }
+}
+
 
 // ── Helpers Supabase nouvelles tables ─────────────────────────────────────────
 async function saveZone(zone) {
@@ -6337,6 +6773,9 @@ document.addEventListener('DOMContentLoaded', function() {
           style="flex:1;padding:10px;background:#038B92;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
           🗂️ Lancer l'ilotage
         </button>
+        <button onclick="clearIlots()"
+          style="padding:10px 14px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap"
+          title="Effacer les îlots de la carte">🗑️</button>
         <button onclick="closeSecteurPanel()"
           style="padding:10px 16px;background:#F5F6F6;color:#58595B;border:1px solid #C4CCCC;border-radius:8px;font-size:13px;cursor:pointer">
           Fermer
