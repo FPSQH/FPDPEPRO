@@ -2851,10 +2851,7 @@ async function lancerIlotageMulti() {
     console.error('lancerIlotageMulti error:', err);
   }
 }
-
-</script>
-</body>
-</html>`);
+`);
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 500);
@@ -6356,6 +6353,7 @@ async function resolveCommune(cp) {
 // URLSearchParams les encode en '+' — format accepté par l'API ADEME.
 async function fetchAdeme(cp) {
   var BASE = 'https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines';
+  // Lucene : OR est prioritaire → pas besoin de parenthèses sur le filtre CP seul
   var cpQ  = 'code_postal_ban:"' + cp + '" OR code_postal_brut:"' + cp + '"';
   var total = 0, fg = 0;
   try {
@@ -6363,18 +6361,32 @@ async function fetchAdeme(cp) {
     var r1 = await fetch(BASE + '?' + p1.toString());
     if (r1.ok) { var j1 = await r1.json(); total = j1.total || 0; }
   } catch(e) {}
-  // 2 requêtes séparées F + G (évite les parenthèses imbriquées rejetées par ADEME)
+  // Requêtes F et G séparées avec filtre CP sur code_postal_ban uniquement
+  // (évite l'ambiguïté AND/OR Lucene sur 2 champs)
   try {
-    var pF = new URLSearchParams({ size: 0,
-      qs: cpQ + ' AND classe_consommation_energie:"F"' });
+    var qF = 'code_postal_ban:"' + cp + '" AND classe_consommation_energie:"F"';
+    var pF = new URLSearchParams({ size: 0, qs: qF });
     var rF = await fetch(BASE + '?' + pF.toString());
     if (rF.ok) { var jF = await rF.json(); fg += jF.total || 0; }
   } catch(e) {}
   try {
-    var pG = new URLSearchParams({ size: 0,
-      qs: cpQ + ' AND classe_consommation_energie:"G"' });
+    var qG = 'code_postal_ban:"' + cp + '" AND classe_consommation_energie:"G"';
+    var pG = new URLSearchParams({ size: 0, qs: qG });
     var rG = await fetch(BASE + '?' + pG.toString());
     if (rG.ok) { var jG = await rG.json(); fg += jG.total || 0; }
+  } catch(e) {}
+  // Complément via code_postal_brut si ban manquant
+  try {
+    var qFb = 'code_postal_brut:"' + cp + '" AND classe_consommation_energie:"F"';
+    var pFb = new URLSearchParams({ size: 0, qs: qFb });
+    var rFb = await fetch(BASE + '?' + pFb.toString());
+    if (rFb.ok) { var jFb = await rFb.json(); fg += jFb.total || 0; }
+  } catch(e) {}
+  try {
+    var qGb = 'code_postal_brut:"' + cp + '" AND classe_consommation_energie:"G"';
+    var pGb = new URLSearchParams({ size: 0, qs: qGb });
+    var rGb = await fetch(BASE + '?' + pGb.toString());
+    if (rGb.ok) { var jGb = await rGb.json(); fg += jGb.total || 0; }
   } catch(e) {}
   return { total: total, fg: fg };
 }
