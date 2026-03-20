@@ -2512,7 +2512,7 @@ function printLetter() {
       </div>
       <div id="secteur-sources" style="font-size:10px;color:#878A8D;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px">
-        <button onclick="lancerIlotage()" id="btn-ilotage"
+        <button onclick="openIlotageModal()" id="btn-ilotage"
           style="flex:1;padding:10px;background:#038B92;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
           🗂️ Lancer l'ilotage
         </button>
@@ -2539,6 +2539,320 @@ function printLetter() {
 .score-bar-fill{height:100%;background:#038B92;border-radius:3px;transition:width .6s ease}
 </style>
 
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     MODAL ÎLOTAGE — Sélection multi-villes
+════════════════════════════════════════════════════════════════════════════ -->
+<div id="ilotage-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.55);z-index:3000;overflow-y:auto">
+  <div style="background:#fff;margin:24px auto;max-width:560px;border-radius:14px;padding:24px;position:relative">
+    <button onclick="closeIlotageModal()" style="position:absolute;top:14px;right:14px;background:none;border:none;font-size:20px;cursor:pointer;color:#878A8D">✕</button>
+    <h2 style="margin:0 0 4px;font-size:18px;font-weight:600;color:#038B92">🗂️ Définir un secteur d'îlotage</h2>
+    <p style="margin:0 0 16px;font-size:13px;color:#878A8D">Ajoutez une ou plusieurs villes pour constituer votre secteur commercial</p>
+
+    <!-- Recherche ville -->
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div style="flex:1;position:relative">
+        <input id="ilot-ville-input" type="text" placeholder="Nom de ville ou code postal…"
+          style="width:100%;padding:10px 14px;border:1.5px solid #C4CCCC;border-radius:8px;font-size:14px;box-sizing:border-box"
+          oninput="rechercherVille()"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();ajouterVilleSuggestion()}" />
+        <div id="ilot-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #C4CCCC;border-top:none;border-radius:0 0 8px 8px;z-index:100;max-height:200px;overflow-y:auto"></div>
+      </div>
+      <button onclick="ajouterVilleSuggestion()"
+        style="padding:10px 18px;background:#038B92;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap">
+        + Ajouter
+      </button>
+    </div>
+
+    <!-- Feedback vérification -->
+    <div id="ilot-ville-feedback" style="font-size:12px;margin-bottom:10px;min-height:16px"></div>
+
+    <!-- Liste des villes sélectionnées -->
+    <div id="ilot-villes-list" style="min-height:60px;margin-bottom:16px">
+      <div id="ilot-villes-empty" style="text-align:center;padding:20px;color:#C4CCCC;font-size:13px">
+        Aucune ville ajoutée — recherchez une ville ci-dessus
+      </div>
+    </div>
+
+    <!-- Résumé secteur -->
+    <div id="ilot-secteur-resume" style="display:none;background:#E6F5F5;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+      <span id="ilot-resume-txt"></span>
+    </div>
+
+    <!-- Boutons actions -->
+    <div style="display:flex;gap:8px">
+      <button onclick="lancerIlotageMulti()" id="btn-ilotage-lancer"
+        style="flex:1;padding:11px;background:#038B92;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;opacity:.5"
+        disabled>
+        🗺️ Calculer les îlots
+      </button>
+      <button onclick="clearIlots()"
+        style="padding:11px 14px;background:#6c757d;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer"
+        title="Effacer les îlots de la carte">🗑️</button>
+      <button onclick="closeIlotageModal()"
+        style="padding:11px 16px;background:#F5F6F6;color:#58595B;border:1px solid #C4CCCC;border-radius:8px;font-size:14px;cursor:pointer">
+        Fermer
+      </button>
+    </div>
+  </div>
+</div>
+
+<style>
+.ilot-ville-tag {
+  display:inline-flex;align-items:center;gap:6px;
+  background:#E6F5F5;border:1px solid #038B92;border-radius:20px;
+  padding:5px 12px;font-size:13px;color:#038B92;font-weight:500;
+  margin:4px;
+}
+.ilot-ville-tag button {
+  background:none;border:none;cursor:pointer;color:#038B92;
+  font-size:16px;line-height:1;padding:0;font-weight:700;
+}
+.ilot-suggest-item {
+  padding:10px 14px;cursor:pointer;font-size:13px;color:#1A1A1A;
+  border-bottom:1px solid #F0F0F0;
+}
+.ilot-suggest-item:hover { background:#E6F5F5; }
+.ilot-suggest-item .suggest-code { color:#878A8D;font-size:11px;margin-left:6px; }
+</style>
+
+<script>
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODAL ÎLOTAGE MULTI-VILLES
+// ══════════════════════════════════════════════════════════════════════════════
+
+var _ilotVilles = [];         // [{nom, cp, codeInsee, population}]
+var _ilotSuggestTimer = null;
+var _ilotSuggestions   = [];  // résultats BAN en attente de sélection
+
+function openIlotageModal() {
+  closeSecteurPanel();
+  document.getElementById('ilotage-modal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  // Pré-remplir avec la ville de l'analyse secteur si disponible
+  if (_secteurData && _ilotVilles.length === 0) {
+    _ajouterVilleObj({
+      nom       : _secteurData.nomVille,
+      cp        : _secteurData.cp,
+      codeInsee : _secteurData.codeInsee,
+      population: _secteurData.population || 0
+    });
+  }
+}
+
+function closeIlotageModal() {
+  document.getElementById('ilotage-modal').style.display = 'none';
+  document.body.style.overflow = '';
+  // Fermer les suggestions
+  document.getElementById('ilot-suggestions').style.display = 'none';
+}
+
+// ── Recherche ville avec debounce ────────────────────────────────────────────
+function rechercherVille() {
+  clearTimeout(_ilotSuggestTimer);
+  var q = document.getElementById('ilot-ville-input').value.trim();
+  if (q.length < 2) {
+    document.getElementById('ilot-suggestions').style.display = 'none';
+    setVilleFeedback('', '');
+    return;
+  }
+  _ilotSuggestTimer = setTimeout(function() { _doRechercherVille(q); }, 350);
+}
+
+async function _doRechercherVille(q) {
+  setVilleFeedback('🔍 Recherche…', '#878A8D');
+  try {
+    // BAN endpoint communes : supporte nom et CP
+    var isCP = /^\d{5}$/.test(q);
+    var url;
+    if (isCP) {
+      url = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q)
+          + '&type=municipality&limit=8&autocomplete=0';
+    } else {
+      url = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(q)
+          + '&type=municipality&limit=8&autocomplete=1';
+    }
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    var data = await resp.json();
+    _ilotSuggestions = (data.features || []).map(function(f) {
+      return {
+        nom       : f.properties.city || f.properties.label || '',
+        cp        : f.properties.postcode || '',
+        codeInsee : f.properties.citycode || '',
+        population: f.properties.population || 0,
+        label     : f.properties.label || ''
+      };
+    });
+
+    if (!_ilotSuggestions.length) {
+      setVilleFeedback('❌ Ville introuvable — vérifiez l\'orthographe', '#E3000B');
+      document.getElementById('ilot-suggestions').style.display = 'none';
+      return;
+    }
+
+    setVilleFeedback('', '');
+    _renderSuggestions(_ilotSuggestions);
+
+  } catch(err) {
+    setVilleFeedback('⚠️ Erreur de recherche : ' + err.message, '#E3000B');
+  }
+}
+
+function _renderSuggestions(suggestions) {
+  var box = document.getElementById('ilot-suggestions');
+  box.innerHTML = '';
+  suggestions.forEach(function(s, i) {
+    var div = document.createElement('div');
+    div.className = 'ilot-suggest-item';
+    div.innerHTML = '<b>' + s.nom + '</b>'
+      + '<span class="suggest-code">' + s.cp + ' — ' + s.codeInsee + '</span>';
+    div.onclick = function() { _selectionnerSuggestion(i); };
+    box.appendChild(div);
+  });
+  box.style.display = suggestions.length ? 'block' : 'none';
+}
+
+function _selectionnerSuggestion(idx) {
+  var s = _ilotSuggestions[idx];
+  if (!s) return;
+  document.getElementById('ilot-ville-input').value = '';
+  document.getElementById('ilot-suggestions').style.display = 'none';
+  setVilleFeedback('', '');
+  _ajouterVilleObj(s);
+}
+
+function ajouterVilleSuggestion() {
+  // Entrée clavier : prendre la 1re suggestion
+  if (_ilotSuggestions.length) {
+    _selectionnerSuggestion(0);
+  } else {
+    var q = document.getElementById('ilot-ville-input').value.trim();
+    if (q.length >= 2) _doRechercherVille(q);
+  }
+}
+
+function _ajouterVilleObj(ville) {
+  // Éviter les doublons par codeInsee
+  var existe = _ilotVilles.some(function(v) {
+    return v.codeInsee === ville.codeInsee || (v.nom === ville.nom && v.cp === ville.cp);
+  });
+  if (existe) {
+    setVilleFeedback('⚠️ ' + ville.nom + ' est déjà dans le secteur', '#E07B00');
+    return;
+  }
+  _ilotVilles.push(ville);
+  setVilleFeedback('✅ ' + ville.nom + ' ajoutée', '#038B92');
+  setTimeout(function() { setVilleFeedback('', ''); }, 2000);
+  _renderVillesTags();
+}
+
+function _supprimerVille(idx) {
+  _ilotVilles.splice(idx, 1);
+  _renderVillesTags();
+}
+
+function _renderVillesTags() {
+  var container = document.getElementById('ilot-villes-list');
+  var empty     = document.getElementById('ilot-villes-empty');
+  var resume    = document.getElementById('ilot-secteur-resume');
+  var btnLancer = document.getElementById('btn-ilotage-lancer');
+
+  if (!_ilotVilles.length) {
+    container.innerHTML = '';
+    container.appendChild(empty);
+    empty.style.display = 'block';
+    resume.style.display = 'none';
+    btnLancer.disabled = true;
+    btnLancer.style.opacity = '.5';
+    return;
+  }
+
+  empty.style.display = 'none';
+  container.innerHTML = '';
+  _ilotVilles.forEach(function(v, i) {
+    var tag = document.createElement('span');
+    tag.className = 'ilot-ville-tag';
+    tag.innerHTML = '<span>📍 ' + v.nom + ' (' + v.cp + ')</span>'
+      + '<button onclick="_supprimerVille(' + i + ')" title="Retirer">×</button>';
+    container.appendChild(tag);
+  });
+
+  // Résumé
+  var totalPop = _ilotVilles.reduce(function(s, v) { return s + (v.population || 0); }, 0);
+  document.getElementById('ilot-resume-txt').innerHTML =
+    '<b>' + _ilotVilles.length + ' ville(s)</b> dans le secteur'
+    + (totalPop ? ' · population totale estimée : <b>' + totalPop.toLocaleString('fr-FR') + '</b>' : '');
+  resume.style.display = 'block';
+
+  btnLancer.disabled = false;
+  btnLancer.style.opacity = '1';
+}
+
+function setVilleFeedback(msg, color) {
+  var el = document.getElementById('ilot-ville-feedback');
+  el.textContent = msg;
+  el.style.color = color || '#038B92';
+}
+
+// Fermer les suggestions en cliquant ailleurs
+document.addEventListener('click', function(e) {
+  var input = document.getElementById('ilot-ville-input');
+  var box   = document.getElementById('ilot-suggestions');
+  if (box && input && !input.contains(e.target) && !box.contains(e.target)) {
+    box.style.display = 'none';
+  }
+});
+
+// ── Lancement îlotage multi-villes ──────────────────────────────────────────
+async function lancerIlotageMulti() {
+  if (!_ilotVilles.length) return;
+  closeIlotageModal();
+
+  if (_ilotLayers) { leafletMap.removeLayer(_ilotLayers); _ilotLayers = null; }
+
+  var toast = document.getElementById('session-toast');
+  function setToast(msg) { if (toast) { toast.textContent = msg; toast.style.display = 'block'; } }
+  function hideToast()   { if (toast) toast.style.display = 'none'; }
+
+  try {
+    var allPoints = [];
+    var totalVilles = _ilotVilles.length;
+
+    for (var vi = 0; vi < totalVilles; vi++) {
+      var ville = _ilotVilles[vi];
+      setToast('[' + (vi+1) + '/' + totalVilles + '] Adresses BAN — ' + ville.nom + '…');
+      var adresses = await fetchBanAdresses(ville.cp);
+
+      setToast('[' + (vi+1) + '/' + totalVilles + '] DPE ADEME — ' + ville.nom + '…');
+      var dpeMap = await fetchAdemeForIlotage(ville.codeInsee);
+
+      var pts = construirePoints(adresses, dpeMap);
+      allPoints = allPoints.concat(pts);
+    }
+
+    setToast('Calcul DBSCAN sur ' + allPoints.length + ' adresses…');
+    var clusters = dbscan(allPoints, ILOT_DBSCAN_EPS, ILOT_DBSCAN_MINPTS);
+    var ilots    = clusters.map(function(cluster, idx) { return optimiserIlot(cluster, idx); });
+    ilots.sort(function(a, b) { return b.score - a.score; });
+
+    setToast('Affichage des îlots…');
+    afficherIlots(ilots);
+
+    var nbOk = ilots.filter(function(i) { return i.portes.length >= 5; }).length;
+    setToast(nbOk + ' îlot(s) · ' + allPoints.length + ' adresses · '
+             + _ilotVilles.map(function(v){ return v.nom; }).join(', '));
+    setTimeout(hideToast, 5000);
+
+  } catch(err) {
+    setToast('Erreur îlotage : ' + err.message);
+    setTimeout(hideToast, 5000);
+    console.error('lancerIlotageMulti error:', err);
+  }
+}
+
+</script>
 </body>
 </html>`);
   win.document.close();
@@ -6253,7 +6567,7 @@ var ILOT_DBSCAN_EPS     = 100;  // epsilon DBSCAN en mètres
 var ILOT_DBSCAN_MINPTS  = 3;    // min points pour former un cluster
 
 // ── Entrée principale ─────────────────────────────────────────────────────────
-async function lancerIlotage() {
+async function lancerIlotage_LEGACY() {
   if (!_secteurData) return;
   closeSecteurPanel();
 
@@ -6769,7 +7083,7 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>
       <div id="secteur-sources" style="font-size:10px;color:#878A8D;margin-bottom:12px"></div>
       <div style="display:flex;gap:8px">
-        <button onclick="lancerIlotage()" id="btn-ilotage"
+        <button onclick="openIlotageModal()" id="btn-ilotage"
           style="flex:1;padding:10px;background:#038B92;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
           🗂️ Lancer l'ilotage
         </button>
