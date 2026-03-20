@@ -6048,8 +6048,10 @@ async function fetchAdeme(cp) {
   } catch(e) {}
   try {
     var fgQ = '(' + cpQ + ') AND (classe_consommation_energie:"F" OR classe_consommation_energie:"G")';
-    var p2  = new URLSearchParams({ size: 0, qs: fgQ });
-    var r2  = await fetch(BASE + '?' + p2.toString());
+    // URLSearchParams encode ( et ) en %28/%29 — ADEME les refuse → on les redécode
+    var p2str = new URLSearchParams({ size: 0, qs: fgQ }).toString()
+                    .replace(/%28/gi, '(').replace(/%29/gi, ')');
+    var r2  = await fetch(BASE + '?' + p2str);
     if (r2.ok) { var j2 = await r2.json(); fg = j2.total || 0; }
   } catch(e) {}
   return { total: total, fg: fg };
