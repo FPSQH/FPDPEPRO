@@ -6034,18 +6034,22 @@ async function resolveCommune(cp) {
   return { code: '', nom: 'Commune ' + cp, population: 0 };
 }
 
-// ── Fetch ADEME DPE (dataset dpe03existant — identique à v10) ────────────────
+// ── Fetch ADEME DPE (dataset dpe03existant — même méthode que v10) ────────────
+// Utilise URLSearchParams comme v10 : espaces dans la valeur Lucene,
+// URLSearchParams les encode en '+' — format accepté par l'API ADEME.
 async function fetchAdeme(cp) {
   var BASE = 'https://data.ademe.fr/data-fair/api/v1/datasets/dpe03existant/lines';
-  var cpQ  = 'code_postal_ban:"' + cp + '"+OR+code_postal_brut:"' + cp + '"';
+  var cpQ  = 'code_postal_ban:"' + cp + '" OR code_postal_brut:"' + cp + '"';
   var total = 0, fg = 0;
   try {
-    var r1 = await fetch(BASE + '?size=0&qs=' + encodeURIComponent(cpQ));
+    var p1 = new URLSearchParams({ size: 0, qs: cpQ });
+    var r1 = await fetch(BASE + '?' + p1.toString());
     if (r1.ok) { var j1 = await r1.json(); total = j1.total || 0; }
   } catch(e) {}
   try {
-    var fgQ = '(' + cpQ + ')+AND+(classe_consommation_energie:"F"+OR+classe_consommation_energie:"G")';
-    var r2  = await fetch(BASE + '?size=0&qs=' + encodeURIComponent(fgQ));
+    var fgQ = '(' + cpQ + ') AND (classe_consommation_energie:"F" OR classe_consommation_energie:"G")';
+    var p2  = new URLSearchParams({ size: 0, qs: fgQ });
+    var r2  = await fetch(BASE + '?' + p2.toString());
     if (r2.ok) { var j2 = await r2.json(); fg = j2.total || 0; }
   } catch(e) {}
   return { total: total, fg: fg };
